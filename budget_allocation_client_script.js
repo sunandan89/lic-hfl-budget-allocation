@@ -1,5 +1,5 @@
 // ============================================================================
-// LIC Budget Allocation v7f — No auto-save + compact UI + scroll fix + hide Budget Summary
+// LIC Budget Allocation v8 — Excel Export + No auto-save + compact UI + scroll fix
 // Client Script for Project proposal
 // ============================================================================
 
@@ -412,6 +412,7 @@ function ab_buildHTML(frm, quarters, years, progData, nonProgData, unitsList) {
       '<span class="ab-legend"><span style="background:#fffef5;padding:2px 6px;border:1px solid #ddd;">■</span> Editable</span>' +
       '<span class="ab-legend"><span style="background:#f4f7fa;padding:2px 6px;border:1px solid #ddd;">■</span> Auto-calculated</span>' +
       '<span class="ab-legend"><span style="background:#fff9e6;padding:2px 6px;border:1px solid #ddd;">■</span> Grand Total</span>' +
+      '<button class="btn btn-sm btn-default ab-download-btn" style="margin-left:auto;border:1px solid #1a5490;color:#1a5490;"><i class="fa fa-download"></i> Download Budget Sheet</button>' +
       '<span class="ab-saved-indicator" id="ab-saved"></span>' +
     '</div>' +
   '</div>';
@@ -856,6 +857,15 @@ function ab_attachEvents(frm, quarters, years, bhMap, sbhMap, sbhRevMap, fsMap, 
     savePBtn.addEventListener('click', function(e) {
       e.preventDefault();
       ab_saveProgData(frm, quarters, years, progData, sbhRevMap, fsMap);
+    });
+  }
+
+  // Download Budget Sheet button
+  var dlBtn = document.querySelector('.ab-download-btn');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      ab_downloadBudget(frm, quarters, years, progData, nonProgData, unitsList);
     });
   }
 }
@@ -1433,6 +1443,820 @@ function ab_dateRange(s, e) {
     return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   };
   return '(' + fmt(s) + ' - ' + fmt(e) + ')';
+}
+
+// ============================================================================
+// EXCEL EXPORT
+// ============================================================================
+
+function ab_loadXlsxLib() {
+  return new Promise(function(resolve, reject) {
+    if (window.XLSX && window.XLSX.utils && window.XLSX.utils.aoa_to_sheet) { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+    s.onload = function() { resolve(); };
+    s.onerror = function() { reject(new Error('Failed to load XLSX library')); };
+    document.head.appendChild(s);
+  });
+}
+
+async function ab_downloadBudget(frm, quarters, years, progData, nonProgData, unitsList) {
+  try {
+    frappe.show_alert({ message: 'Preparing Excel download...', indicator: 'blue' });
+    await ab_loadXlsxLib();
+
+    var wb = XLSX.utils.book_new();
+
+    // Color constants matching reference
+    var C_DARK = '333333';
+    var C_GREY_HDR = 'BCBDC0';
+    var C_LIGHT_GREY = 'E6E6E6';
+    var C_ALT_ROW = 'F4F5F6';
+    var C_YELLOW = 'FFCB05';
+    var C_BLUE = '00529C';
+    var C_WHITE = 'FFFFFF';
+    var INR_FMT = '_(₹* #,##0.00_);_(₹* (#,##0.00);_(₹* "-"??_);_(@_)';
+    var PCT_FMT = '0.00%';
+    var NUM_FMT = '#,##0';
+
+    // Helper: create styled cell
+    function sc(v, opts) {
+      opts = opts || {};
+      var cell = { v: v, t: typeof v === 'number' ? 'n' : 's' };
+      var s = {};
+      if (opts.font) s.font = opts.font;
+      else s.font = { name: 'Arial', sz: 11 };
+      if (opts.fill) s.fill = { fgColor: { rgb: opts.fill } };
+      if (opts.alignment) s.alignment = opts.alignment;
+      else s.alignment = { vertical: 'center' };
+      if (opts.border !== false) {
+        s.border = {
+          top: { style: 'thin', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: '000000' } },
+          left: { style: 'thin', color: { rgb: '000000' } },
+          right: { style: 'thin', color: { rgb: '000000' } }
+        };
+      }
+      if (opts.numFmt) { s.numFmt = opts.numFmt; cell.z = opts.numFmt; }
+      cell.s = s;
+      return cell;
+    }
+
+    // Collect live data from DOM
+    var progLiveData = ab_collectProgDataFromDOM(quarters, years, progData);
+    var nonProgLiveData = ab_collectNonProgDataFromDOM(quarters, years, nonProgData);
+
+    // ---- Sheet 2: Programmatic Costs ----
+    var progSheet = ab_buildProgSheet(frm, quarters, years, progLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT);
+    XLSX.utils.book_append_sheet(wb, progSheet.ws, 'Programmatic Costs');
+
+    // ---- Sheet 3: Non-Programmatic Costs ----
+    var npSheet = ab_buildNonProgSheet(frm, quarters, years, nonProgLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT);
+    XLSX.utils.book_append_sheet(wb, npSheet.ws, 'Non-Programmatic Costs');
+
+    // ---- Sheet 1: Budget Summary ----
+    var summarySheet = ab_buildSummarySheet(frm, progLiveData, nonProgLiveData, quarters, years, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_WHITE, INR_FMT, PCT_FMT);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Budget Summary');
+
+    // Reorder sheets: Budget Summary first
+    wb.SheetNames = ['Budget Summary', 'Programmatic Costs', 'Non-Programmatic Costs'];
+
+    var fname = 'Budget_' + (frm.doc.name || 'Proposal') + '.xlsx';
+    XLSX.writeFile(wb, fname);
+    frappe.show_alert({ message: 'Budget sheet downloaded!', indicator: 'green' });
+  } catch (err) {
+    console.error('[AB] Excel export error:', err);
+    frappe.show_alert({ message: 'Excel export failed: ' + err.message, indicator: 'red' });
+  }
+}
+
+// Collect programmatic data from the live DOM inputs
+function ab_collectProgDataFromDOM(quarters, years, progData) {
+  var rows = [];
+  var table = document.querySelector('.ab-prog-table');
+  if (!table) return { rows: rows, grandTotal: {} };
+
+  var dataRows = table.querySelectorAll('.ab-data-row');
+  dataRows.forEach(function(tr, idx) {
+    var origRow = (progData.rows || [])[idx] || {};
+    var desc = origRow.description || '';
+    var task = origRow.assumption || '';
+    var ucInp = tr.querySelector('.ab-uc-inp');
+    var uc = ucInp ? parseFloat(ucInp.value) || 0 : 0;
+    var uom = origRow.uom || 'Numbers';
+
+    var qtrData = [];
+    quarters.forEach(function(q, qi) {
+      var licInp = tr.querySelector('input[data-fs="lic"][data-qi="' + qi + '"]');
+      var govtInp = tr.querySelector('input[data-fs="govt"][data-qi="' + qi + '"]');
+      var benfInp = tr.querySelector('input[data-fs="benf"][data-qi="' + qi + '"]');
+      var lu = licInp ? parseFloat(licInp.value) || 0 : 0;
+      var gu = govtInp ? parseFloat(govtInp.value) || 0 : 0;
+      var bu = benfInp ? parseFloat(benfInp.value) || 0 : 0;
+      qtrData.push({ lic: lu, govt: gu, benf: bu });
+    });
+
+    rows.push({ description: desc, task: task, uom: uom, unitCost: uc, quarters: qtrData });
+  });
+
+  return { rows: rows };
+}
+
+// Collect non-programmatic data from the live DOM inputs
+function ab_collectNonProgDataFromDOM(quarters, years, nonProgData) {
+  var sections = {};
+  var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
+
+  sectionOrder.forEach(function(sec) {
+    var sRows = [];
+    var allTrs = document.querySelectorAll('.ab-nonprog-table .ab-data-row[data-section="' + sec + '"]');
+    allTrs.forEach(function(tr, idx) {
+      var descInp = tr.querySelector('.ab-desc-inp');
+      var uomSel = tr.querySelector('.ab-uom-sel');
+      var ucInp = tr.querySelector('.ab-uc-inp');
+      var desc = descInp ? descInp.value.trim() : '';
+      var uom = uomSel ? uomSel.value : '';
+      var uc = ucInp ? parseFloat(ucInp.value) || 0 : 0;
+
+      var qtrUnits = [];
+      quarters.forEach(function(q, qi) {
+        var inp = tr.querySelector('.ab-np-inp[data-qi="' + qi + '"]');
+        var u = inp ? parseFloat(inp.value) || 0 : 0;
+        qtrUnits.push(u);
+      });
+
+      if (desc) sRows.push({ description: desc, uom: uom, unitCost: uc, qtrUnits: qtrUnits });
+    });
+    sections[sec] = sRows;
+  });
+
+  return sections;
+}
+
+// Build Programmatic Costs sheet
+function ab_buildProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT) {
+  var rows = liveData.rows || [];
+  var aoa = [];
+  var merges = [];
+
+  // Row 0: Title
+  var r0 = [sc('', { border: false }), sc('', { border: false }), sc('', { border: false }),
+    sc('Programmatic Costs', { font: { name: 'Arial', sz: 16, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: false })];
+  for (var i = 4; i < 27; i++) r0.push(sc('', { border: false }));
+  aoa.push(r0);
+  // Row 1: empty
+  aoa.push([]);
+  merges.push({ s: { r: 0, c: 3 }, e: { r: 1, c: 9 } });
+
+  // Row 2: Quarter headers spanning across — "Convergence" + Q1..Q4 + Remarks
+  var r2 = [];
+  for (var i = 0; i < 7; i++) r2.push(sc('', { fill: C_LIGHT_GREY }));
+  r2[7] = sc('Convergence', { font: { name: 'Arial', sz: 16, bold: true }, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT });
+  r2[8] = sc('', { fill: C_LIGHT_GREY });
+  r2[9] = sc('', { fill: C_LIGHT_GREY });
+
+  var qColors = [C_BLUE, C_YELLOW, C_BLUE, C_YELLOW];
+  var qFontColors = ['FFFFFF', '000000', 'FFFFFF', '000000'];
+  var qIdx = 0;
+  quarters.forEach(function(q, qi) {
+    var colStart = 10 + qi * 4;
+    r2[colStart] = sc(q.quarter, { font: { name: 'Arial', sz: 16, bold: true, color: { rgb: qFontColors[qIdx % 4] } }, fill: qColors[qIdx % 4], alignment: { horizontal: 'center', vertical: 'center' } });
+    for (var j = 1; j < 4; j++) r2[colStart + j] = sc('', { fill: qColors[qIdx % 4] });
+    merges.push({ s: { r: 2, c: colStart }, e: { r: 2, c: colStart + 3 } });
+    qIdx++;
+  });
+  var remCol = 10 + quarters.length * 4;
+  r2[remCol] = sc('Remarks', { font: { name: 'Arial', sz: 14, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } });
+  merges.push({ s: { r: 2, c: remCol }, e: { r: 3, c: remCol } });
+  aoa.push(r2);
+  merges.push({ s: { r: 2, c: 7 }, e: { r: 2, c: 9 } });
+
+  // Row 3: Sub-column headers
+  var hdrFont = { name: 'Arial', sz: 11, bold: true };
+  var r3 = [
+    sc('Sr. No.', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+    sc('Activity', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+    sc('Task Details (Mandatory)', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+    sc('Unit of Measurement', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+    sc('Unit Cost', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
+    sc('Total Units', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+    sc('Total Cost', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
+    sc('Total LIC HFL Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
+    sc('Government Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
+    sc('Beneficiary Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT })
+  ];
+  quarters.forEach(function(q, qi) {
+    var cIdx = qi % 4;
+    var bgC = qColors[cIdx];
+    var fC = qFontColors[cIdx];
+    r3.push(sc('Units to Cover', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }));
+    r3.push(sc('Cost', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
+    r3.push(sc('LIC HFL Contribution', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
+    r3.push(sc('Beneficiary Contribution', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
+  });
+  r3.push(sc('', {})); // Remarks
+  aoa.push(r3);
+
+  // Data rows
+  var grandTotalUnits = 0, grandLic = 0, grandGovt = 0, grandBenf = 0, grandCost = 0;
+  var grandQtrLic = [], grandQtrBenf = [], grandQtrCost = [];
+  quarters.forEach(function() { grandQtrLic.push(0); grandQtrBenf.push(0); grandQtrCost.push(0); });
+
+  rows.forEach(function(row, idx) {
+    var uc = row.unitCost || 0;
+    var totalUnits = 0, totalLic = 0, totalGovt = 0, totalBenf = 0;
+    row.quarters.forEach(function(qd) {
+      totalUnits += qd.lic + qd.govt + qd.benf;
+      totalLic += qd.lic * uc;
+      totalGovt += qd.govt * uc;
+      totalBenf += qd.benf * uc;
+    });
+    var totalCost = totalLic + totalGovt + totalBenf;
+    var licContrib = totalCost - totalGovt - totalBenf;
+
+    grandTotalUnits += totalUnits;
+    grandLic += licContrib;
+    grandGovt += totalGovt;
+    grandBenf += totalBenf;
+    grandCost += totalCost;
+
+    var fillC = (idx % 2 === 0) ? C_ALT_ROW : C_WHITE;
+    var dataFont = { name: 'Arial', sz: 11 };
+    var dr = [
+      sc(idx + 1, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
+      sc(row.description, { font: dataFont, fill: fillC, alignment: { horizontal: 'left', vertical: 'center' } }),
+      sc(row.task || '', { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'left', vertical: 'top', wrapText: true } }),
+      sc(row.uom || 'Numbers', { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
+      sc(uc, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } }),
+      sc(totalUnits, { font: dataFont, fill: fillC }),
+      sc(totalCost, { font: dataFont, fill: fillC, numFmt: INR_FMT }),
+      sc(licContrib, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT }),
+      sc(totalGovt, { font: dataFont, fill: fillC, numFmt: INR_FMT }),
+      sc(totalBenf, { font: dataFont, fill: fillC, numFmt: INR_FMT })
+    ];
+
+    row.quarters.forEach(function(qd, qi) {
+      var qUnits = qd.lic + qd.govt + qd.benf;
+      var qCost = qUnits * uc;
+      var qLicAmt = qd.lic * uc;
+      var qBenfAmt = qd.benf * uc;
+      grandQtrLic[qi] += qLicAmt;
+      grandQtrBenf[qi] += qBenfAmt;
+      grandQtrCost[qi] += qCost;
+
+      dr.push(sc(qUnits || '', { font: dataFont }));
+      dr.push(sc(qCost || '', { font: dataFont, numFmt: INR_FMT }));
+      dr.push(sc(qLicAmt || '', { font: dataFont, numFmt: INR_FMT }));
+      dr.push(sc(qBenfAmt || '', { font: dataFont, numFmt: INR_FMT }));
+    });
+    dr.push(sc('', {})); // Remarks
+    aoa.push(dr);
+  });
+
+  // Grand Total row
+  var gtFont = { name: 'Arial', sz: 12, bold: true };
+  var gt = [
+    sc('', { fill: C_YELLOW }),
+    sc('Grand Total', { font: gtFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } }),
+    sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }),
+    sc(grandTotalUnits, { font: gtFont, fill: C_YELLOW }),
+    sc(grandCost, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
+    sc(grandLic, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
+    sc(grandGovt, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
+    sc(grandBenf, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT })
+  ];
+  merges.push({ s: { r: aoa.length, c: 1 }, e: { r: aoa.length, c: 5 } });
+  quarters.forEach(function(q, qi) {
+    gt.push(sc('', { fill: C_YELLOW }));
+    gt.push(sc(grandQtrCost[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
+    gt.push(sc(grandQtrLic[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
+    gt.push(sc(grandQtrBenf[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
+  });
+  gt.push(sc('', { fill: C_YELLOW }));
+  aoa.push(gt);
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+
+  // Column widths
+  var cols = [
+    { wch: 5 }, { wch: 30 }, { wch: 35 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 13 }, { wch: 13 }
+  ];
+  quarters.forEach(function() {
+    cols.push({ wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 });
+  });
+  cols.push({ wch: 50 });
+  ws['!cols'] = cols;
+
+  return { ws: ws, grandLic: grandLic, grandGovt: grandGovt, grandBenf: grandBenf, grandCost: grandCost, grandQtrLic: grandQtrLic, grandQtrCost: grandQtrCost };
+}
+
+// Build Non-Programmatic Costs sheet
+function ab_buildNonProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT) {
+  var aoa = [];
+  var merges = [];
+  var sectionLabels = {
+    'Human Resource Costs': { letter: 'A', label: 'Human Resource Costs' },
+    'Administration Costs': { letter: 'B', label: 'Administration Costs' },
+    'NGO Management Costs': { letter: 'C', label: 'NGO Management Costs' }
+  };
+  var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
+  var totalCols = 6 + quarters.length * 2 + 1; // A..F + Q units/cost pairs + Remarks
+
+  // Row 0-3: Top header area (similar to reference)
+  // Row 0: Header with "Cost Component" | Amount | %ge | "Non-Programmatic Costs"
+  var hdrFont16 = { name: 'Arial', sz: 16, bold: true };
+  var hdrFont11 = { name: 'Arial', sz: 11, bold: true };
+  var r0 = [sc('', {}), sc('', {}),
+    sc('Cost Component', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('', {}),
+    sc('Amount', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
+    sc('%ge', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('Non-Programmatic Costs', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } })
+  ];
+  for (var i = 7; i < totalCols; i++) r0.push(sc('', {}));
+  aoa.push(r0);
+  merges.push({ s: { r: 0, c: 2 }, e: { r: 0, c: 3 } });
+  merges.push({ s: { r: 0, c: 6 }, e: { r: 3, c: 5 + quarters.length * 2 } });
+
+  // Rows 1-3: section summaries (HR, Admin, NGO)
+  var secTotals = {};
+  var grandNP = 0;
+  sectionOrder.forEach(function(sec) {
+    var sRows = liveData[sec] || [];
+    var t = 0;
+    sRows.forEach(function(r) { t += r.unitCost * r.qtrUnits.reduce(function(a, b) { return a + b; }, 0); });
+    secTotals[sec] = t;
+    grandNP += t;
+  });
+
+  var summaryLabels = ['Human Resource', 'Admin', 'NGO Management'];
+  for (var si = 0; si < 3; si++) {
+    var sec = sectionOrder[si];
+    var r = [sc('', {}), sc('', {}),
+      sc(summaryLabels[si], { font: hdrFont11, alignment: { horizontal: 'left', vertical: 'center' } }),
+      sc('', {}),
+      sc(secTotals[sec], { font: hdrFont11, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
+      sc(grandNP ? secTotals[sec] / grandNP : 0, { font: hdrFont11, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: '0.00%' })
+    ];
+    for (var i = 6; i < totalCols; i++) r.push(sc('', {}));
+    aoa.push(r);
+    merges.push({ s: { r: si + 1, c: 2 }, e: { r: si + 1, c: 3 } });
+  }
+
+  // Row 4: Quarter header spans
+  var r4 = [];
+  for (var i = 0; i < 6; i++) r4.push(sc('', {}));
+  var qColors = [C_BLUE, C_YELLOW, C_BLUE, C_YELLOW];
+  var qFontColors = ['FFFFFF', '000000', 'FFFFFF', '000000'];
+  quarters.forEach(function(q, qi) {
+    var cIdx = qi % 4;
+    var colStart = 6 + qi * 2;
+    r4[colStart] = sc(q.quarter, { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' } });
+    r4[colStart + 1] = sc('', { fill: qColors[cIdx] });
+    merges.push({ s: { r: 4, c: colStart }, e: { r: 4, c: colStart + 1 } });
+  });
+  var remC = 6 + quarters.length * 2;
+  r4[remC] = sc('Remarks', { font: { name: 'Arial', sz: 12, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } });
+  merges.push({ s: { r: 4, c: remC }, e: { r: 5, c: remC } });
+  aoa.push(r4);
+
+  // Row 5: Sub-column headers
+  var r5 = [
+    sc('Sr. No.', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('Particulars', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('Unit of Measurement', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('Unit Cost', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
+    sc('Total Units', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('Total Cost', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT })
+  ];
+  quarters.forEach(function(q, qi) {
+    var cIdx = qi % 4;
+    r5.push(sc('Units to Cover', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' } }));
+    r5.push(sc('Cost', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }));
+  });
+  r5.push(sc('', {})); // Remarks placeholder
+  aoa.push(r5);
+
+  // Data sections
+  var allSectionTotals = { total: 0, qtrCosts: [] };
+  quarters.forEach(function() { allSectionTotals.qtrCosts.push(0); });
+
+  sectionOrder.forEach(function(sec, secIdx) {
+    var info = sectionLabels[sec];
+    var sRows = liveData[sec] || [];
+    var whiteFont = { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+
+    // Section header row
+    var secHdr = [
+      sc(info.letter, { font: whiteFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } }),
+      sc(info.label, { font: whiteFont, fill: C_DARK, alignment: { horizontal: 'left', vertical: 'center' } })
+    ];
+    for (var i = 2; i < totalCols; i++) secHdr.push(sc('', { fill: C_DARK }));
+    aoa.push(secHdr);
+
+    var secTotal = 0, secQtrCosts = [];
+    quarters.forEach(function() { secQtrCosts.push(0); });
+
+    sRows.forEach(function(row, rIdx) {
+      var totalUnits = row.qtrUnits.reduce(function(a, b) { return a + b; }, 0);
+      var totalCost = totalUnits * row.unitCost;
+      secTotal += totalCost;
+
+      var fillC = (rIdx % 2 === 0) ? C_ALT_ROW : C_WHITE;
+      var dataFont = { name: 'Arial', sz: 11 };
+      var dr = [
+        sc(rIdx + 1, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
+        sc(row.description, { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'left', vertical: 'center' } }),
+        sc(row.uom || '', { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
+        sc(row.unitCost, { font: dataFont, numFmt: INR_FMT }),
+        sc(totalUnits, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
+        sc(totalCost, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT })
+      ];
+      quarters.forEach(function(q, qi) {
+        var u = row.qtrUnits[qi] || 0;
+        var c = u * row.unitCost;
+        secQtrCosts[qi] += c;
+        allSectionTotals.qtrCosts[qi] += c;
+        dr.push(sc(u || '', { font: dataFont, alignment: { horizontal: 'center' } }));
+        dr.push(sc(c || '', { font: dataFont, numFmt: INR_FMT }));
+      });
+      dr.push(sc('', {}));
+      aoa.push(dr);
+    });
+
+    // Add empty rows if less than reference template (to match template look)
+    var minRows = sec === 'Human Resource Costs' ? 15 : sec === 'Administration Costs' ? 15 : 5;
+    for (var e = sRows.length; e < minRows; e++) {
+      var er = [sc('', { fill: C_ALT_ROW }), sc('', {})];
+      for (var i = 2; i < totalCols; i++) er.push(sc('', {}));
+      aoa.push(er);
+    }
+
+    // Section total row
+    var totLabel = 'TOTAL (' + info.letter + ')';
+    var totFont = { name: 'Arial', sz: 12, bold: true };
+    var totRow = [
+      sc('', { fill: C_GREY_HDR }),
+      sc(totLabel, { font: totFont, fill: C_GREY_HDR, alignment: { horizontal: 'left', vertical: 'center' } }),
+      sc('', { fill: C_GREY_HDR }), sc('', { fill: C_GREY_HDR }), sc('', { fill: C_GREY_HDR }),
+      sc(secTotal, { font: totFont, fill: C_GREY_HDR, numFmt: INR_FMT })
+    ];
+    quarters.forEach(function(q, qi) {
+      totRow.push(sc('', { fill: C_GREY_HDR }));
+      totRow.push(sc(secQtrCosts[qi], { font: totFont, fill: C_GREY_HDR, numFmt: INR_FMT }));
+    });
+    totRow.push(sc('', { fill: C_GREY_HDR }));
+    aoa.push(totRow);
+
+    allSectionTotals.total += secTotal;
+  });
+
+  // Grand Total row
+  var gtFont = { name: 'Arial', sz: 14, bold: true };
+  var grandRow = [
+    sc('Grand Total', { font: gtFont, fill: C_YELLOW, alignment: { horizontal: 'center', vertical: 'center' } }),
+    sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }),
+    sc(allSectionTotals.total, { font: { name: 'Arial', sz: 12, bold: true }, fill: C_YELLOW, numFmt: INR_FMT })
+  ];
+  merges.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: 4 } });
+  quarters.forEach(function(q, qi) {
+    grandRow.push(sc('', { fill: C_YELLOW }));
+    grandRow.push(sc(allSectionTotals.qtrCosts[qi], { font: { name: 'Arial', sz: 11 }, fill: C_YELLOW, numFmt: INR_FMT }));
+  });
+  grandRow.push(sc('', { fill: C_YELLOW }));
+  aoa.push(grandRow);
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+
+  var cols = [
+    { wch: 5 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 18 }
+  ];
+  quarters.forEach(function() { cols.push({ wch: 10 }, { wch: 16 }); });
+  cols.push({ wch: 50 });
+  ws['!cols'] = cols;
+
+  return { ws: ws, sectionTotals: secTotals, grandTotal: allSectionTotals.total, qtrCosts: allSectionTotals.qtrCosts };
+}
+
+// Build Budget Summary sheet
+function ab_buildSummarySheet(frm, progLiveData, nonProgLiveData, quarters, years, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_WHITE, INR_FMT, PCT_FMT) {
+  var aoa = [];
+  var merges = [];
+
+  // Calculate totals
+  var progRows = progLiveData.rows || [];
+  var progTotal = 0, progLic = 0, progGovt = 0, progBenf = 0;
+  var progQtrCosts = [];
+  quarters.forEach(function() { progQtrCosts.push(0); });
+
+  progRows.forEach(function(row) {
+    var uc = row.unitCost || 0;
+    row.quarters.forEach(function(qd, qi) {
+      var qCost = (qd.lic + qd.govt + qd.benf) * uc;
+      progTotal += qCost;
+      progLic += qd.lic * uc;
+      progGovt += qd.govt * uc;
+      progBenf += qd.benf * uc;
+      progQtrCosts[qi] += qCost;
+    });
+  });
+
+  var hrTotal = 0, adminTotal = 0, ngoTotal = 0, npTotal = 0;
+  var npQtrCosts = [];
+  quarters.forEach(function() { npQtrCosts.push(0); });
+  var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
+  sectionOrder.forEach(function(sec) {
+    var sRows = nonProgLiveData[sec] || [];
+    var t = 0;
+    sRows.forEach(function(r) {
+      r.qtrUnits.forEach(function(u, qi) {
+        var c = u * r.unitCost;
+        t += c;
+        npQtrCosts[qi] += c;
+      });
+    });
+    if (sec === 'Human Resource Costs') hrTotal = t;
+    else if (sec === 'Administration Costs') adminTotal = t;
+    else ngoTotal = t;
+    npTotal += t;
+  });
+
+  var overallTotal = progTotal + npTotal;
+  var licHflTotal = progLic + npTotal; // Non-prog is all LIC-funded
+  var costShareTotal = licHflTotal + progGovt + progBenf;
+
+  var titleFont = { name: 'Arial', sz: 16, bold: true };
+  var sectionFont = { name: 'Arial', sz: 12, bold: true, color: { rgb: 'FFFFFF' } };
+  var hdrFont = { name: 'Arial', sz: 11, bold: true };
+  var dataFont = { name: 'Arial', sz: 11 };
+  var boldFont = { name: 'Arial', sz: 11, bold: true };
+
+  // Row 0-1: Title
+  var r0 = []; for (var i = 0; i < 13; i++) r0.push(sc('', { border: false }));
+  r0[6] = sc('Proposed Budget Statement - Summary Sheet', { font: titleFont, alignment: { horizontal: 'center', vertical: 'center' }, border: false });
+  aoa.push(r0);
+  aoa.push([]);
+  merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 5 } });
+  merges.push({ s: { r: 0, c: 6 }, e: { r: 1, c: 12 } });
+
+  // Row 2: empty
+  aoa.push([]);
+
+  // Row 3: "Project Details" | "Cost Per Beneficiary"
+  var r3 = [];
+  for (var i = 0; i < 13; i++) r3.push(sc('', {}));
+  r3[1] = sc('Project Details', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
+  r3[9] = sc('Cost Per Beneficiary', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r3);
+  merges.push({ s: { r: 3, c: 1 }, e: { r: 3, c: 7 } });
+  merges.push({ s: { r: 3, c: 9 }, e: { r: 3, c: 11 } });
+
+  // Row 4: Project Name | Total Project Costs
+  var projName = frm.doc.project_name || frm.doc.name || '';
+  var r4 = [];
+  for (var i = 0; i < 13; i++) r4.push(sc('', {}));
+  r4[1] = sc('I', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r4[2] = sc('Name of the Project', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r4[5] = sc(projName, { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center', wrapText: true } });
+  r4[9] = sc('Total Project Costs', { font: dataFont, fill: C_LIGHT_GREY });
+  r4[10] = sc(licHflTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r4);
+  merges.push({ s: { r: 4, c: 2 }, e: { r: 4, c: 4 } });
+  merges.push({ s: { r: 4, c: 5 }, e: { r: 4, c: 7 } });
+  merges.push({ s: { r: 4, c: 10 }, e: { r: 4, c: 11 } });
+
+  // Row 5: Duration placeholder
+  var r5 = [];
+  for (var i = 0; i < 13; i++) r5.push(sc('', {}));
+  r5[1] = sc('II', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r5[2] = sc('Project Duration', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r5[5] = sc(frm.doc.start_date || '', { font: dataFont });
+  r5[6] = sc('TO', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r5[7] = sc(frm.doc.end_date || '', { font: dataFont });
+  r5[9] = sc('Total Beneficiaries', { font: dataFont, fill: C_LIGHT_GREY });
+  r5[10] = sc(frm.doc.total_beneficiaries || 0, { font: dataFont, fill: C_WHITE });
+  aoa.push(r5);
+  merges.push({ s: { r: 5, c: 2 }, e: { r: 5, c: 4 } });
+
+  // Row 6: States
+  var r6 = [];
+  for (var i = 0; i < 13; i++) r6.push(sc('', {}));
+  r6[1] = sc('III', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r6[2] = sc('Project Intervention States', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r6[5] = sc(frm.doc.state || '', { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center' } });
+  r6[9] = sc('Cost per Beneficiary', { font: dataFont, fill: C_LIGHT_GREY });
+  var benCount = frm.doc.total_beneficiaries || 0;
+  r6[10] = sc(benCount ? licHflTotal / benCount : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r6);
+  merges.push({ s: { r: 6, c: 2 }, e: { r: 6, c: 4 } });
+  merges.push({ s: { r: 6, c: 5 }, e: { r: 6, c: 7 } });
+  merges.push({ s: { r: 6, c: 10 }, e: { r: 6, c: 11 } });
+
+  // Row 7: Sites
+  var r7 = [];
+  for (var i = 0; i < 13; i++) r7.push(sc('', {}));
+  r7[1] = sc('IV', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r7[2] = sc('No. of Intervention Site', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r7[5] = sc('', { font: dataFont });
+  aoa.push(r7);
+  merges.push({ s: { r: 7, c: 2 }, e: { r: 7, c: 4 } });
+  merges.push({ s: { r: 7, c: 5 }, e: { r: 7, c: 7 } });
+
+  // Row 8: Partner
+  var r8 = [];
+  for (var i = 0; i < 13; i++) r8.push(sc('', {}));
+  r8[1] = sc('V', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r8[2] = sc('Implementing Partner', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r8[5] = sc(frm.doc.ngo || '', { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center' } });
+  aoa.push(r8);
+  merges.push({ s: { r: 8, c: 2 }, e: { r: 8, c: 4 } });
+  merges.push({ s: { r: 8, c: 5 }, e: { r: 8, c: 7 } });
+
+  // Row 9: empty
+  aoa.push([]);
+
+  // Row 10: "Budget Breakup" header
+  var r10 = [];
+  for (var i = 0; i < 13; i++) r10.push(sc('', {}));
+  r10[1] = sc('Budget Breakup', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r10);
+  merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 6 } });
+
+  // Row 11: A - DIRECT COSTS header + "Quarterly Breakup of Costs"
+  var r11 = [];
+  for (var i = 0; i < 13; i++) r11.push(sc('', {}));
+  r11[1] = sc('A', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r11[2] = sc('DIRECT COSTS', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r11[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r11[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r11[9] = sc('Quarterly Breakup of Costs', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r11);
+  merges.push({ s: { r: 11, c: 2 }, e: { r: 11, c: 4 } });
+  merges.push({ s: { r: 11, c: 9 }, e: { r: 11, c: 11 } });
+
+  // Row 12: Programmatic + Q1
+  var directTotal = progTotal + hrTotal;
+  var r12 = [];
+  for (var i = 0; i < 13; i++) r12.push(sc('', {}));
+  r12[1] = sc('i', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r12[2] = sc('Programmatic Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r12[5] = sc(progTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r12[6] = sc(overallTotal ? progTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  r12[9] = sc('First Quarter', { font: dataFont });
+  var q1Total = (progQtrCosts[0] || 0) + (npQtrCosts[0] || 0);
+  r12[10] = sc(q1Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  r12[11] = sc(overallTotal ? q1Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
+  aoa.push(r12);
+  merges.push({ s: { r: 12, c: 2 }, e: { r: 12, c: 4 } });
+
+  // Row 13: HR Costs + Q2
+  var r13 = [];
+  for (var i = 0; i < 13; i++) r13.push(sc('', {}));
+  r13[1] = sc('ii', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r13[2] = sc('Human Resource Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r13[5] = sc(hrTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r13[6] = sc(overallTotal ? hrTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  r13[9] = sc('Second Quarter', { font: dataFont });
+  var q2Total = (progQtrCosts[1] || 0) + (npQtrCosts[1] || 0);
+  r13[10] = sc(q2Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  r13[11] = sc(overallTotal ? q2Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
+  aoa.push(r13);
+  merges.push({ s: { r: 13, c: 2 }, e: { r: 13, c: 4 } });
+
+  // Row 14: Total Direct (A)
+  var r14 = [];
+  for (var i = 0; i < 13; i++) r14.push(sc('', {}));
+  r14[2] = sc('TOTAL DIRECT COST (A)', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r14[5] = sc(directTotal, { font: boldFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r14[6] = sc(overallTotal ? directTotal / overallTotal : 0, { font: boldFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  r14[9] = sc('Third Quarter', { font: dataFont });
+  var q3Total = (progQtrCosts[2] || 0) + (npQtrCosts[2] || 0);
+  r14[10] = sc(q3Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  r14[11] = sc(overallTotal ? q3Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
+  aoa.push(r14);
+  merges.push({ s: { r: 14, c: 2 }, e: { r: 14, c: 4 } });
+
+  // Row 15: B - INDIRECT COSTS
+  var r15 = [];
+  for (var i = 0; i < 13; i++) r15.push(sc('', {}));
+  r15[1] = sc('B', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r15[2] = sc('INDIRECT COSTS', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r15[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r15[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r15[9] = sc('Fourth Quarter', { font: dataFont });
+  var q4Total = (progQtrCosts[3] || 0) + (npQtrCosts[3] || 0);
+  r15[10] = sc(q4Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  r15[11] = sc(overallTotal ? q4Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
+  aoa.push(r15);
+  merges.push({ s: { r: 15, c: 2 }, e: { r: 15, c: 4 } });
+
+  // Row 16: Admin + Total row
+  var indirectTotal = adminTotal + ngoTotal;
+  var r16 = [];
+  for (var i = 0; i < 13; i++) r16.push(sc('', {}));
+  r16[1] = sc('i', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r16[2] = sc('Admin Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r16[5] = sc(adminTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r16[6] = sc(overallTotal ? adminTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  r16[9] = sc('Total', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } });
+  r16[10] = sc(overallTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT, alignment: { horizontal: 'right', vertical: 'center', wrapText: true } });
+  r16[11] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT, alignment: { horizontal: 'right', vertical: 'center' } });
+  aoa.push(r16);
+  merges.push({ s: { r: 16, c: 2 }, e: { r: 16, c: 4 } });
+
+  // Row 17: NGO Management
+  var r17 = [];
+  for (var i = 0; i < 13; i++) r17.push(sc('', {}));
+  r17[1] = sc('ii', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
+  r17[2] = sc('NGO Management Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r17[5] = sc(ngoTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r17[6] = sc(overallTotal ? ngoTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  aoa.push(r17);
+  merges.push({ s: { r: 17, c: 2 }, e: { r: 17, c: 4 } });
+
+  // Row 18: Total Indirect (B)
+  var r18 = [];
+  for (var i = 0; i < 13; i++) r18.push(sc('', {}));
+  r18[2] = sc('TOTAL INDIRECT COSTS (B)', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r18[5] = sc(indirectTotal, { font: boldFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r18[6] = sc(overallTotal ? indirectTotal / overallTotal : 0, { font: boldFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  aoa.push(r18);
+  merges.push({ s: { r: 18, c: 2 }, e: { r: 18, c: 4 } });
+
+  // Row 19: GRAND TOTAL (A+B)
+  var r19 = [];
+  for (var i = 0; i < 13; i++) r19.push(sc('', {}));
+  r19[2] = sc('GRANT TOTAL (A+B)', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'center', vertical: 'center' } });
+  r19[5] = sc(overallTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT });
+  r19[6] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT });
+  aoa.push(r19);
+  merges.push({ s: { r: 19, c: 2 }, e: { r: 19, c: 4 } });
+
+  // Row 20: empty
+  aoa.push([]);
+
+  // Row 21: Cost Sharing Details header
+  var r21 = [];
+  for (var i = 0; i < 13; i++) r21.push(sc('', {}));
+  r21[1] = sc('Cost Sharing Details', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r21);
+  merges.push({ s: { r: 21, c: 1 }, e: { r: 21, c: 6 } });
+
+  // Row 22: Header
+  var r22 = [];
+  for (var i = 0; i < 13; i++) r22.push(sc('', {}));
+  r22[1] = sc('Cost Sharing', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r22[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  r22[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  aoa.push(r22);
+
+  // Row 23: Government
+  var r23 = [];
+  for (var i = 0; i < 13; i++) r23.push(sc('', {}));
+  r23[1] = sc('Government Convergence', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r23[5] = sc(progGovt, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r23[6] = sc(costShareTotal ? progGovt / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  aoa.push(r23);
+  merges.push({ s: { r: 23, c: 1 }, e: { r: 23, c: 4 } });
+
+  // Row 24: Beneficiary
+  var r24 = [];
+  for (var i = 0; i < 13; i++) r24.push(sc('', {}));
+  r24[1] = sc('Community/Beneficiary/NGO/Other', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r24[5] = sc(progBenf, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r24[6] = sc(costShareTotal ? progBenf / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  aoa.push(r24);
+  merges.push({ s: { r: 24, c: 1 }, e: { r: 24, c: 4 } });
+
+  // Row 25: LIC HFL
+  var r25 = [];
+  for (var i = 0; i < 13; i++) r25.push(sc('', {}));
+  r25[1] = sc('LIC HFL Contribution', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
+  r25[5] = sc(licHflTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
+  r25[6] = sc(costShareTotal ? licHflTotal / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
+  aoa.push(r25);
+  merges.push({ s: { r: 25, c: 1 }, e: { r: 25, c: 4 } });
+
+  // Row 26: TOTAL
+  var r26 = [];
+  for (var i = 0; i < 13; i++) r26.push(sc('', {}));
+  r26[1] = sc('TOTAL', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } });
+  r26[5] = sc(costShareTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT });
+  r26[6] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT });
+  aoa.push(r26);
+  merges.push({ s: { r: 26, c: 1 }, e: { r: 26, c: 4 } });
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+  ws['!cols'] = [
+    { wch: 3 }, { wch: 7 }, { wch: 10 }, { wch: 13 }, { wch: 13 },
+    { wch: 16 }, { wch: 13 }, { wch: 16 }, { wch: 8 },
+    { wch: 26 }, { wch: 18 }, { wch: 14 }, { wch: 3 }
+  ];
+
+  return ws;
 }
 
 // ============================================================================
