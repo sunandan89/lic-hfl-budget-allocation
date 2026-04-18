@@ -1,5 +1,5 @@
 // ============================================================================
-// LIC Budget Allocation v8 — Excel Export + No auto-save + compact UI + scroll fix
+// LIC Budget Allocation v8b — Fixed sticky headers + Protected Excel export
 // Client Script for Project proposal
 // ============================================================================
 
@@ -428,7 +428,12 @@ function ab_buildProgTab(frm, quarters, years, data) {
   var html = '<div class="ab-scroll-wrapper"><table class="ab-table ab-prog-table"><thead>';
 
   // Row 1: Year spans + Grand Total
-  html += '<tr class="ab-header-row-1"><th colspan="5" class="ab-frozen-header" style="left:0;">.</th>';
+  html += '<tr class="ab-header-row-1">' +
+    '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:40px;min-width:40px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r1" style="left:40px;width:200px;min-width:200px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r1" style="left:240px;width:180px;min-width:180px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r1" style="left:420px;width:80px;min-width:80px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r1" style="left:500px;width:90px;min-width:90px;">&nbsp;</th>';
   years.forEach(function(y, yi) {
     var yqCount = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).length;
     var colspan = yqCount * nq + ny;
@@ -437,14 +442,19 @@ function ab_buildProgTab(frm, quarters, years, data) {
   html += '<th colspan="3" class="ab-grand-total-header">Grand Total</th></tr>';
 
   // Row 2: Quarter labels + Year Total label
-  html += '<tr class="ab-header-row-2"><th colspan="5" class="ab-frozen-header" style="left:0;">.</th>';
+  html += '<tr class="ab-header-row-2">' +
+    '<th class="ab-frozen-header ab-hdr-r2" style="left:0;width:40px;min-width:40px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r2" style="left:40px;width:200px;min-width:200px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r2" style="left:240px;width:180px;min-width:180px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r2" style="left:420px;width:80px;min-width:80px;">&nbsp;</th>' +
+    '<th class="ab-frozen-header ab-hdr-r2" style="left:500px;width:90px;min-width:90px;">&nbsp;</th>';
   years.forEach(function(y, yi) {
     quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function(q) {
       html += '<th colspan="7" class="ab-quarter-header ab-year-' + yi + '">' + q.quarter + ' ' + ab_dateRange(q.start_date, q.end_date) + '</th>';
     });
     html += '<th colspan="5" class="ab-year-total-header ab-year-' + yi + '">Year ' + (yi + 1) + ' Total</th>';
   });
-  html += '<th colspan="3" class="ab-grand-total-header">.</th></tr>';
+  html += '<th colspan="3" class="ab-grand-total-header">&nbsp;</th></tr>';
 
   // Row 3: Sub-column headers
   html += '<tr class="ab-header-row-3">' +
@@ -626,7 +636,11 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       '<table class="ab-table ab-nonprog-table"><thead>';
 
     // Row 1: Year spans
-    html += '<tr class="ab-header-row-1"><th colspan="4" class="ab-frozen-header" style="left:0;">.</th>';
+    html += '<tr class="ab-header-row-1">' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:30px;min-width:30px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:30px;width:180px;min-width:180px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:210px;width:72px;min-width:72px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:282px;width:70px;min-width:70px;">&nbsp;</th>';
     years.forEach(function(y, yi) {
       var yqCount = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).length;
       html += '<th colspan="' + (yqCount * 2) + '" class="ab-year-header ab-year-' + yi + '">Year ' + (yi + 1) + '</th>';
@@ -635,7 +649,11 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
     html += '<th colspan="3" class="ab-grand-total-header">Grand Total</th></tr>';
 
     // Row 2: Quarter labels
-    html += '<tr class="ab-header-row-2"><th colspan="4" class="ab-frozen-header" style="left:0;">.</th>';
+    html += '<tr class="ab-header-row-2">' +
+      '<th class="ab-frozen-header ab-hdr-r2" style="left:0;width:30px;min-width:30px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r2" style="left:30px;width:180px;min-width:180px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r2" style="left:210px;width:72px;min-width:72px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r2" style="left:282px;width:70px;min-width:70px;">&nbsp;</th>';
     years.forEach(function(y, yi) {
       quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function(q) {
         html += '<th colspan="2" class="ab-quarter-header ab-year-' + yi + '">' + q.quarter + '</th>';
@@ -644,7 +662,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
     years.forEach(function(y, yi) {
       html += '<th colspan="2" class="ab-year-total-header ab-year-' + yi + '">Year ' + (yi + 1) + '</th>';
     });
-    html += '<th colspan="3" class="ab-grand-total-header">.</th></tr>';
+    html += '<th colspan="3" class="ab-grand-total-header">&nbsp;</th></tr>';
 
     // Row 3: Sub-columns
     html += '<tr class="ab-header-row-3">' +
@@ -1748,6 +1766,7 @@ function ab_buildProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY_HD
   cols.push({ wch: 50 });
   ws['!cols'] = cols;
 
+  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
   return { ws: ws, grandLic: grandLic, grandGovt: grandGovt, grandBenf: grandBenf, grandCost: grandCost, grandQtrLic: grandQtrLic, grandQtrCost: grandQtrCost };
 }
 
@@ -1937,6 +1956,7 @@ function ab_buildNonProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY
   cols.push({ wch: 50 });
   ws['!cols'] = cols;
 
+  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
   return { ws: ws, sectionTotals: secTotals, grandTotal: allSectionTotals.total, qtrCosts: allSectionTotals.qtrCosts };
 }
 
@@ -2256,6 +2276,7 @@ function ab_buildSummarySheet(frm, progLiveData, nonProgLiveData, quarters, year
     { wch: 26 }, { wch: 18 }, { wch: 14 }, { wch: 3 }
   ];
 
+  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
   return ws;
 }
 
@@ -2283,7 +2304,9 @@ function ab_getStyles() {
 .ab-table thead tr:nth-child(2) th { top: 26px; z-index: 8; }\
 .ab-table thead tr:nth-child(3) th { top: 52px; z-index: 8; }\
 .ab-frozen { position: sticky; z-index: 10; background: #f8f9fa; }\
-.ab-frozen-header { position: sticky; z-index: 12; background: #f8f9fa; }\
+.ab-frozen-header { position: sticky; z-index: 12; }\
+.ab-hdr-r1 { background: #f0f4ff !important; }\
+.ab-hdr-r2 { background: #f8f9fa !important; }\
 .ab-table thead .ab-frozen { z-index: 13; }\
 .ab-sr { text-align: center; font-weight: 500; width: 30px; min-width: 30px; }\
 .ab-desc-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }\
