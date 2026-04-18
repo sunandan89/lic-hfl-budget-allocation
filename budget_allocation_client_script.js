@@ -1,5 +1,5 @@
 // ============================================================================
-// LIC Budget Allocation v8b — Fixed sticky headers + Protected Excel export
+// LIC Budget Allocation v8c — Fixed frozen columns in header rows (border-separate fix)
 // Client Script for Project proposal
 // ============================================================================
 
@@ -2294,20 +2294,20 @@ function ab_getStyles() {
 .ab-tab-content { display: block; }\
 .ab-tab-content.ab-hidden { display: none; }\
 .ab-scroll-wrapper { overflow-x: auto; overflow-y: auto; max-height: 70vh; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }\
-.ab-table { border-collapse: collapse; background: #fff; }\
+.ab-table { border-collapse: separate; border-spacing: 0; background: #fff; }\
 .ab-prog-table { min-width: 100%; }\
 .ab-nonprog-table { min-width: 100%; }\
 .ab-table th, .ab-table td { border: 1px solid #ddd; padding: 3px 4px; font-size: 11px; white-space: nowrap; }\
 .ab-table th { text-align: center; font-weight: 500; position: sticky; top: 0; z-index: 8; }\
 .ab-table td { text-align: right; }\
-.ab-table thead tr:nth-child(1) th { top: 0; z-index: 8; }\
-.ab-table thead tr:nth-child(2) th { top: 26px; z-index: 8; }\
-.ab-table thead tr:nth-child(3) th { top: 52px; z-index: 8; }\
+.ab-table thead tr:nth-child(1) th { top: 0; z-index: 9; }\
+.ab-table thead tr:nth-child(2) th { top: 25px; z-index: 9; }\
+.ab-table thead tr:nth-child(3) th { top: 50px; z-index: 9; }\
 .ab-frozen { position: sticky; z-index: 10; background: #f8f9fa; }\
-.ab-frozen-header { position: sticky; z-index: 12; }\
+.ab-frozen-header { position: sticky; z-index: 15 !important; }\
 .ab-hdr-r1 { background: #f0f4ff !important; }\
 .ab-hdr-r2 { background: #f8f9fa !important; }\
-.ab-table thead .ab-frozen { z-index: 13; }\
+.ab-table thead .ab-frozen { z-index: 15 !important; }\
 .ab-sr { text-align: center; font-weight: 500; width: 30px; min-width: 30px; }\
 .ab-desc-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }\
 .ab-header-row-1 th { background: #f0f4ff; font-weight: 600; padding: 5px 3px; }\
