@@ -155,18 +155,20 @@ This script is a **pre-existing dependency** (not written as part of this projec
 - This is what causes the Programmatic Costs tab to show pre-selected activity rows
 
 **How to deploy:**
-1. Go to `stg.lichfl.mgrant.in` → Client Script list
-2. Open **"Activity KPI NGO Filter"**
-3. Copy the full script
-4. On the target server: Client Script list → **+ Add Client Script**
+1. Get the script from either:
+   - Git repo: `https://github.com/sunandan89/lic-hfl-budget-allocation.git` → file `activity_kpi_ngo_filter_client_script.js`
+   - Or copy from staging: `stg.lichfl.mgrant.in` → Client Script list → open **"Activity KPI NGO Filter"** → copy script
+2. On the target server: Client Script list → **+ Add Client Script**
    - **Name:** `Activity KPI NGO Filter`
    - **DocType:** `Project proposal`
    - **Script Type:** Client
    - **Enabled:** ✓
    - Paste the script
-5. Save
+3. Save
 
 **Without this script:** The budget tab will still work, but the Programmatic Costs tab will only show rows from existing PBP records — no auto-population of activities from the NGO profile.
+
+> **Note:** The `activity_kpi_ngo_filter_client_script.js` file will be added to the Git repo once the staging server is accessible. If it's not yet in the repo when you read this, copy it directly from staging as described above.
 
 ---
 
@@ -259,9 +261,10 @@ The target server's browser must have internet access for the download button to
 
 | File | Purpose |
 |------|---------|
-| `budget_allocation_v8c.js` | Latest client script code (paste into Frappe) |
+| `budget_allocation_client_script.js` | Main budget allocation script — v8c (paste into Frappe as "LIC Budget Allocation v4") |
+| `activity_kpi_ngo_filter_client_script.js` | Activity filter script (paste into Frappe as "Activity KPI NGO Filter") — *pending addition from staging* |
 | `LIC_HFL_Budget_Allocation_Handover.md` | This document |
-| Git repo: `budget_allocation_client_script.js` | Same code, version-controlled |
+| `budget_allocation_v8c.js` | Copy of main script for quick access |
 
 ---
 
