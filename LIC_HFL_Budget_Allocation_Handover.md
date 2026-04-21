@@ -168,7 +168,7 @@ This script is a **pre-existing dependency** (not written as part of this projec
 
 **Without this script:** The budget tab will still work, but the Programmatic Costs tab will only show rows from existing PBP records — no auto-population of activities from the NGO profile.
 
-> **Note:** The `activity_kpi_ngo_filter_client_script.js` file will be added to the Git repo once the staging server is accessible. If it's not yet in the repo when you read this, copy it directly from staging as described above.
+The script is available in the Git repo as `activity_kpi_ngo_filter_client_script.js` (19 lines). It sets a `get_query` filter on the `custom_activity` child table so the Activity dropdown only shows activities linked to the selected NGO partner. It re-applies the filter when the `ngo` field changes.
 
 ---
 
@@ -262,7 +262,7 @@ The target server's browser must have internet access for the download button to
 | File | Purpose |
 |------|---------|
 | `budget_allocation_client_script.js` | Main budget allocation script — v8c (paste into Frappe as "LIC Budget Allocation v4") |
-| `activity_kpi_ngo_filter_client_script.js` | Activity filter script (paste into Frappe as "Activity KPI NGO Filter") — *pending addition from staging* |
+| `activity_kpi_ngo_filter_client_script.js` | Activity filter script (paste into Frappe as "Activity KPI NGO Filter") |
 | `LIC_HFL_Budget_Allocation_Handover.md` | This document |
 | `budget_allocation_v8c.js` | Copy of main script for quick access |
 
