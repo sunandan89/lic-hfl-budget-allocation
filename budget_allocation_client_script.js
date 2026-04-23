@@ -9,6 +9,12 @@ frappe.ui.form.on('Project proposal', {
   },
   onload(frm) {
     if (!frm.doc.__islocal) setup_budget_tab(frm);
+  },
+  after_save(frm) {
+    // Clear render cache so the budget tab re-renders on next refresh.
+    // This ensures newly added activities (custom_activity rows) appear
+    // without requiring a hard page reload.
+    frm._ab_rendered_for = null;
   }
 });
 
