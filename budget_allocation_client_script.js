@@ -472,13 +472,13 @@ function ab_buildProgTab(frm, quarters, years, data) {
   // Quarterly column headers (per quarter)
   quarters.forEach(function(q, qi) {
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">Units</th>';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">Cost</th>';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">LIC HFL</th>';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">Benf</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:65px;min-width:65px;">Units</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:75px;min-width:75px;">Cost</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:75px;min-width:75px;">LIC HFL</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:65px;min-width:65px;">Benf</th>';
   });
 
-  html += '<th class="ab-remarks-hdr">Remarks</th>';
+  html += '<th class="ab-remarks-hdr" style="width:100px;min-width:100px;">Remarks</th>';
   html += '</tr></thead><tbody>';
 
   // Data rows
@@ -525,10 +525,10 @@ function ab_buildProgRow(row, quarters, idx) {
     var qBenf = qCost - qLicHfl;
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
 
-    html += '<td class="ab-editable ' + qClass + '"><input type="number" class="ab-inp ab-q-units-inp" data-idx="' + idx + '" data-qi="' + qi + '" value="' + qUnits + '" /></td>';
-    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qCost) + '</td>';
-    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qLicHfl) + '</td>';
-    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qBenf) + '</td>';
+    html += '<td class="ab-editable ' + qClass + '" style="width:65px;"><input type="number" class="ab-inp ab-q-units-inp" style="width:55px;" data-idx="' + idx + '" data-qi="' + qi + '" value="' + qUnits + '" /></td>';
+    html += '<td class="ab-calc ' + qClass + '" style="width:75px;">' + ab_fc(qCost) + '</td>';
+    html += '<td class="ab-calc ' + qClass + '" style="width:75px;">' + ab_fc(qLicHfl) + '</td>';
+    html += '<td class="ab-calc ' + qClass + '" style="width:65px;">' + ab_fc(qBenf) + '</td>';
   });
 
   html += '<td class="ab-editable"><input type="text" class="ab-inp ab-remarks-inp" data-idx="' + idx + '" value="' + ab_he(row.remarks || '') + '" placeholder="Remarks..." /></td>';
@@ -606,10 +606,10 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
 
     quarters.forEach(function(q, qi) {
       var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
-      html += '<th class="ab-subcol ' + qClass + '">Units</th>';
-      html += '<th class="ab-subcol ' + qClass + '">Cost</th>';
+      html += '<th class="ab-subcol ' + qClass + '" style="width:65px;min-width:65px;">Units</th>';
+      html += '<th class="ab-subcol ' + qClass + '" style="width:75px;min-width:75px;">Cost</th>';
     });
-    html += '<th class="ab-subcol">Units</th><th class="ab-subcol">Cost</th><th class="ab-remarks-hdr">Remarks</th>';
+    html += '<th class="ab-subcol" style="width:65px;min-width:65px;">Units</th><th class="ab-subcol" style="width:75px;min-width:75px;">Cost</th><th class="ab-remarks-hdr" style="width:100px;min-width:100px;">Remarks</th>';
     html += '</tr></thead><tbody>';
 
     // Data rows
@@ -670,8 +670,8 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
     combinedCost += c;
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
 
-    html += '<td class="ab-editable ' + qClass + '"><input type="number" class="ab-inp ab-np-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-qi="' + qi + '" value="' + u + '" /></td>' +
-            '<td class="ab-calc ' + qClass + '">' + ab_fc(c) + '</td>';
+    html += '<td class="ab-editable ' + qClass + '" style="width:65px;"><input type="number" class="ab-inp ab-np-inp" style="width:55px;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-qi="' + qi + '" value="' + u + '" /></td>' +
+            '<td class="ab-calc ' + qClass + '" style="width:75px;">' + ab_fc(c) + '</td>';
   });
 
   // Combined Total
