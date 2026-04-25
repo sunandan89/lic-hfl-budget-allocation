@@ -505,17 +505,17 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   // Data rows
   rows.forEach(function(row, idx) {
-    html += ab_buildProgRow(row, quarters, idx);
+    html += ab_buildProgRow(row, quarters, years, idx);
   });
 
   // Grand total row
-  html += ab_buildProgGrandTotal(rows, quarters);
+  html += ab_buildProgGrandTotal(rows, quarters, years);
 
   html += '</tbody></table></div>';
   return html;
 }
 
-function ab_buildProgRow(row, quarters, idx) {
+function ab_buildProgRow(row, quarters, years, idx) {
   var html = '<tr class="ab-data-row" data-idx="' + idx + '">';
 
   // Frozen columns (0-4): Sr, Activity, Task Details, UoM, Unit Cost
@@ -571,7 +571,7 @@ function ab_buildProgRow(row, quarters, idx) {
   return html;
 }
 
-function ab_buildProgGrandTotal(rows, quarters) {
+function ab_buildProgGrandTotal(rows, quarters, years) {
   var html = '<tr class="ab-grand-total-row">';
 
   // Frozen columns (5): Sr, Activity, Task Details, UoM, Unit Cost
