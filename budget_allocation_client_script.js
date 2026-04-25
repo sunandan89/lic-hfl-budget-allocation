@@ -632,9 +632,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
 
     // Row 1: Headers with frozen columns (4) merged + year-grouped quarterly + Grand Total + Remarks
     html += '<tr class="ab-header-row-1">' +
-      '<th colspan="4" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Particulars</th>' +
-      '<th class="ab-quarter-header">&nbsp;</th>' +
-      '<th class="ab-quarter-header">&nbsp;</th>';
+      '<th colspan="6" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Particulars</th>';
 
     // Year-grouped headers with nested quarter labels (2 sub-cols per quarter)
     years.forEach(function(y, yi) {
@@ -662,12 +660,12 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
 
     // Row 2: Column headers
     html += '<tr class="ab-header-row-2">' +
-      '<th class="ab-frozen" style="left:0;width:30px;min-width:30px;">Sr.</th>' +
-      '<th class="ab-frozen" style="left:30px;width:160px;min-width:160px;">Particulars</th>' +
-      '<th class="ab-frozen" style="left:190px;width:60px;min-width:60px;">UoM</th>' +
-      '<th class="ab-frozen ab-frozen-last" style="left:250px;width:75px;min-width:75px;">Unit Cost</th>' +
-      '<th class="ab-calc" style="width:70px;min-width:70px;">Total Units</th>' +
-      '<th class="ab-calc" style="width:85px;min-width:85px;">Total Cost</th>';
+      '<th class="ab-frozen" style="left:0;width:30px;min-width:30px;max-width:30px;">Sr.</th>' +
+      '<th class="ab-frozen" style="left:30px;width:160px;min-width:160px;max-width:160px;">Particulars</th>' +
+      '<th class="ab-frozen" style="left:190px;width:60px;min-width:60px;max-width:60px;">UoM</th>' +
+      '<th class="ab-frozen" style="left:250px;width:75px;min-width:75px;max-width:75px;">Unit Cost</th>' +
+      '<th class="ab-frozen ab-calc" style="left:325px;width:70px;min-width:70px;max-width:70px;">Total Units</th>' +
+      '<th class="ab-frozen ab-calc ab-frozen-last" style="left:395px;width:85px;min-width:85px;max-width:85px;">Total Cost</th>';
 
     quarters.forEach(function(q, qi) {
       var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
@@ -717,21 +715,21 @@ function ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList) {
   });
 
   var html = '<tr class="ab-data-row" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-pbp="' + ab_he(pbpId) + '">' +
-    '<td class="ab-frozen ab-sr" style="left:0;width:30px;min-width:30px;">' + (idx + 1) + '</td>' +
+    '<td class="ab-frozen ab-sr" style="left:0;width:30px;min-width:30px;max-width:30px;">' + (idx + 1) + '</td>' +
     '<td class="ab-frozen ab-editable" style="left:30px;width:160px;min-width:160px;max-width:160px;text-align:left;"><input type="text" class="ab-inp ab-desc-inp" style="width:150px;text-align:left;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.description) + '" placeholder="Enter particulars..." /></td>' +
-    '<td class="ab-frozen ab-editable" style="left:190px;width:60px;min-width:60px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:55px;text-align:left;">' + uomOptions + '</select></td>' +
-    '<td class="ab-frozen ab-editable ab-frozen-last" style="left:250px;width:75px;min-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
+    '<td class="ab-frozen ab-editable" style="left:190px;width:60px;min-width:60px;max-width:60px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:55px;text-align:left;">' + uomOptions + '</select></td>' +
+    '<td class="ab-frozen ab-editable" style="left:250px;width:75px;min-width:75px;max-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
 
-  // Total Units (auto-calc) - non-frozen
+  // Total Units (auto-calc) - frozen
   var totalUnits = 0;
   quarters.forEach(function(q, qi) {
     totalUnits += (qData[qi] || {}).units || 0;
   });
-  html += '<td class="ab-calc" style="width:70px;min-width:70px;">' + totalUnits + '</td>';
+  html += '<td class="ab-frozen ab-calc" style="left:325px;width:70px;min-width:70px;max-width:70px;">' + totalUnits + '</td>';
 
-  // Total Cost (auto-calc) - non-frozen
+  // Total Cost (auto-calc) - frozen last
   var totalCost = uc * totalUnits;
-  html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(totalCost) + '</td>';
+  html += '<td class="ab-frozen ab-calc ab-frozen-last" style="left:395px;width:85px;min-width:85px;max-width:85px;">' + ab_fc(totalCost) + '</td>';
 
   // Per-quarter data
   quarters.forEach(function(q, qi) {
@@ -764,21 +762,21 @@ function ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList) {
 
 function ab_buildNonProgSectionTotal(rows, quarters, years, secTitle) {
   var html = '<tr class="ab-section-total-row">' +
-    '<td class="ab-frozen" style="left:0;width:30px;min-width:30px;"></td>' +
-    '<td class="ab-frozen" style="left:30px;width:160px;min-width:160px;text-align:left;font-weight:700;">Section Total</td>' +
-    '<td class="ab-frozen" style="left:190px;width:60px;min-width:60px;"></td>' +
-    '<td class="ab-frozen" style="left:250px;width:75px;min-width:75px;"></td>';
+    '<td class="ab-frozen" style="left:0;width:30px;min-width:30px;max-width:30px;"></td>' +
+    '<td class="ab-frozen" style="left:30px;width:160px;min-width:160px;max-width:160px;text-align:left;font-weight:700;">Section Total</td>' +
+    '<td class="ab-frozen" style="left:190px;width:60px;min-width:60px;max-width:60px;"></td>' +
+    '<td class="ab-frozen" style="left:250px;width:75px;min-width:75px;max-width:75px;"></td>';
 
-  // Total Units - non-frozen
+  // Total Units - frozen
   var totalUnits = 0;
   rows.forEach(function(row) {
     quarters.forEach(function(q, qi) {
       totalUnits += (row.quarters[qi] || {}).units || 0;
     });
   });
-  html += '<td class="ab-calc" style="width:70px;min-width:70px;">' + totalUnits + '</td>';
+  html += '<td class="ab-frozen ab-calc" style="left:325px;width:70px;min-width:70px;max-width:70px;">' + totalUnits + '</td>';
 
-  // Total Cost - non-frozen
+  // Total Cost - frozen last
   var totalCost = 0;
   rows.forEach(function(row) {
     var uc = row.unit_cost || 0;
@@ -787,7 +785,7 @@ function ab_buildNonProgSectionTotal(rows, quarters, years, secTitle) {
       totalCost += u * uc;
     });
   });
-  html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(totalCost) + '</td>';
+  html += '<td class="ab-frozen ab-calc ab-frozen-last" style="left:395px;width:85px;min-width:85px;max-width:85px;">' + ab_fc(totalCost) + '</td>';
 
   // Per-quarter totals
   quarters.forEach(function(q, qi) {
