@@ -456,10 +456,10 @@ function ab_buildProgTab(frm, quarters, years, data) {
   // Row 2: Column headers
   html += '<tr class="ab-header-row-2">';
   html += '<th class="ab-frozen ab-sr-hdr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">Sr.</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:35px;width:150px;min-width:150px;">Activity</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:185px;width:120px;min-width:120px;">Task Details</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:305px;width:55px;min-width:55px;">UoM</th>';
-  html += '<th class="ab-frozen ab-col-hdr ab-frozen-last" style="left:360px;width:75px;min-width:75px;">Unit Cost</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:35px;width:150px;min-width:150px;max-width:150px;">Activity</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:185px;width:120px;min-width:120px;max-width:120px;">Task Details</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:305px;width:55px;min-width:55px;max-width:55px;">UoM</th>';
+  html += '<th class="ab-frozen ab-col-hdr ab-frozen-last" style="left:360px;width:75px;min-width:75px;max-width:75px;">Unit Cost</th>';
   html += '<th class="ab-col-hdr" style="width:70px;min-width:70px;">Total Units</th>';
   html += '<th class="ab-col-hdr" style="width:85px;min-width:85px;">Total Cost</th>';
   html += '<th class="ab-col-hdr" style="width:100px;min-width:100px;">LIC HFL Contribution</th>';
@@ -494,11 +494,11 @@ function ab_buildProgRow(row, quarters, idx) {
   var html = '<tr class="ab-data-row" data-idx="' + idx + '">';
 
   // Frozen columns (0-4): Sr, Activity, Task Details, UoM, Unit Cost
-  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">' + (idx + 1) + '</td>';
-  html += '<td class="ab-frozen ab-desc-cell" style="left:35px;width:150px;min-width:150px;text-align:left;" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</td>';
-  html += '<td class="ab-frozen ab-editable" style="left:185px;width:120px;min-width:120px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
-  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;">' + ab_he(row.uomName || 'Numbers') + '</td>';
-  html += '<td class="ab-frozen ab-editable ab-frozen-last" style="left:360px;width:75px;min-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
+  html += '<td class="ab-frozen ab-sr" style="left:0px;width:35px;min-width:35px;max-width:35px;">' + (idx + 1) + '</td>';
+  html += '<td class="ab-frozen" style="left:35px;width:150px;min-width:150px;max-width:150px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</td>';
+  html += '<td class="ab-frozen ab-editable" style="left:185px;width:120px;min-width:120px;max-width:120px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" style="width:110px;" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
+  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;max-width:55px;overflow:hidden;text-overflow:ellipsis;">' + ab_he(row.uomName || 'Numbers') + '</td>';
+  html += '<td class="ab-frozen ab-editable ab-frozen-last" style="left:360px;width:75px;min-width:75px;max-width:75px;"><input type="number" class="ab-inp ab-uc-inp" style="width:65px;" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
 
   // Non-frozen columns (5-9): Total Units, Total Cost, LIC HFL, Govt, Benf
   html += '<td class="ab-editable" style="width:70px;min-width:70px;"><input type="number" class="ab-inp ab-tu-inp" data-idx="' + idx + '" value="' + (row.total_units || 0) + '" /></td>';
@@ -537,11 +537,11 @@ function ab_buildProgGrandTotal(rows, quarters) {
   var html = '<tr class="ab-grand-total-row">';
 
   // Frozen columns (5): Sr, Activity, Task Details, UoM, Unit Cost
-  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">GT</td>';
-  html += '<td class="ab-frozen" style="left:35px;width:150px;min-width:150px;text-align:left;font-weight:700;">GRAND TOTAL</td>';
-  html += '<td class="ab-frozen" style="left:185px;width:120px;min-width:120px;"></td>';
-  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;"></td>';
-  html += '<td class="ab-frozen" style="left:360px;width:75px;min-width:75px;"></td>';
+  html += '<td class="ab-frozen ab-sr" style="left:0px;width:35px;min-width:35px;max-width:35px;">GT</td>';
+  html += '<td class="ab-frozen" style="left:35px;width:150px;min-width:150px;max-width:150px;text-align:left;font-weight:700;">GRAND TOTAL</td>';
+  html += '<td class="ab-frozen" style="left:185px;width:120px;min-width:120px;max-width:120px;"></td>';
+  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;max-width:55px;"></td>';
+  html += '<td class="ab-frozen ab-frozen-last" style="left:360px;width:75px;min-width:75px;max-width:75px;"></td>';
 
   // Non-frozen columns (5): Total Units, Total Cost, LIC HFL, Govt, Benf
   html += '<td class="ab-gt-cell" style="width:70px;min-width:70px;"></td>';
@@ -1363,7 +1363,7 @@ function ab_getStyles() {
 .ab-footer { display: flex; gap: 16px; align-items: center; padding: 12px 0; margin-top: 16px; }
 .ab-legend { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
 .ab-scroll-wrapper { overflow: auto; max-height: 70vh; border: 1px solid #ddd; margin: 12px 0; position: relative; -webkit-overflow-scrolling: touch; }
-.ab-table { width: max-content; border-collapse: separate; border-spacing: 0; background: white; }
+.ab-table { width: max-content; border-collapse: separate; border-spacing: 0; background: white; table-layout: fixed; }
 .ab-table td, .ab-table th { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: center; font-size: 12px; white-space: nowrap; }
 .ab-table thead th { position: sticky; z-index: 9; background: #f5f5f5; }
 .ab-table thead tr:nth-child(1) th { top: 0; z-index: 11; }
