@@ -444,13 +444,33 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   html += '<thead>';
 
-  // Row 1: Frozen headers (empty for cols 0-4) + Convergence spanning cols 5-9 + Quarter spans + Remarks
+  // Row 1: Frozen headers (empty for cols 0-4) + Convergence spanning cols 5-9 + Year-grouped quarters + Grand Total + Remarks
   html += '<tr class="ab-header-row-1">';
   html += '<th colspan="5" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Activity Details</th>';
   html += '<th colspan="5" class="ab-convergence-header">Convergence</th>';
-  quarters.forEach(function(q, qi) {
-    html += '<th colspan="4" class="ab-quarter-header">' + q.quarter + '</th>';
+
+  // Year-grouped headers with nested quarter labels
+  years.forEach(function(y, yi) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var colspan = yqList.length * 4;
+    html += '<th colspan="' + colspan + '" class="ab-year-header-cell">' +
+      '<div class="ab-year-top">Year ' + (yi + 1) + '</div>' +
+      '<div class="ab-quarter-row">';
+    yqList.forEach(function(q) {
+      html += '<span class="ab-q-label">' + q.quarter + '</span>';
+    });
+    html += '</div></th>';
   });
+
+  // Grand Total column spanning all years
+  html += '<th colspan="' + years.length + '" class="ab-gt-header-cell">' +
+    '<div class="ab-year-top">Grand Total</div>' +
+    '<div class="ab-quarter-row">';
+  years.forEach(function(y, yi) {
+    html += '<span class="ab-q-label">Y' + (yi + 1) + ' Total</span>';
+  });
+  html += '</div></th>';
+
   html += '<th class="ab-quarter-header">&nbsp;</th></tr>';
 
   // Row 2: Column headers
@@ -473,6 +493,11 @@ function ab_buildProgTab(frm, quarters, years, data) {
     html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:75px;min-width:75px;">Cost</th>';
     html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:75px;min-width:75px;">LIC HFL</th>';
     html += '<th class="ab-subcol-hdr ' + qClass + '" style="width:65px;min-width:65px;">Benf</th>';
+  });
+
+  // Year total columns
+  years.forEach(function(y, yi) {
+    html += '<th class="ab-gt-subcol" style="width:80px;min-width:80px;">Y' + (yi + 1) + ' Total</th>';
   });
 
   html += '<th class="ab-remarks-hdr" style="width:100px;min-width:100px;">Remarks</th>';
@@ -528,6 +553,19 @@ function ab_buildProgRow(row, quarters, idx) {
     html += '<td class="ab-calc ' + qClass + '" style="width:65px;">' + ab_fc(qBenf) + '</td>';
   });
 
+  // Year total columns (auto-calculated)
+  var yuc = row.unit_cost || 0;
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yCost = 0;
+    yqList.forEach(function(q) {
+      var qi = quarters.indexOf(q);
+      var qUnits = (row.quarters[qi] || {}).units || 0;
+      yCost += yuc * qUnits;
+    });
+    html += '<td class="ab-gt-cell" style="width:80px;">' + ab_fc(yCost) + '</td>';
+  });
+
   html += '<td class="ab-editable"><input type="text" class="ab-inp ab-remarks-inp" data-idx="' + idx + '" value="' + ab_he(row.remarks || '') + '" placeholder="Remarks..." /></td>';
   html += '</tr>';
   return html;
@@ -559,6 +597,18 @@ function ab_buildProgGrandTotal(rows, quarters) {
     html += '<td class="ab-gt-cell ' + qClass + '">0</td>';
   });
 
+  // Year total columns (will be recalculated)
+  var yearCount = 0;
+  if (rows.length > 0) {
+    // Count unique year_sequences
+    var yearSet = {};
+    quarters.forEach(function(q) { yearSet[q.year_sequence] = true; });
+    yearCount = Object.keys(yearSet).length;
+  }
+  for (var yi = 0; yi < yearCount; yi++) {
+    html += '<td class="ab-gt-cell">0</td>';
+  }
+
   html += '<td class="ab-gt-cell"></td>';
   html += '</tr>';
   return html;
@@ -580,15 +630,35 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       '<div class="ab-section-content"><div class="ab-scroll-wrapper">' +
       '<table class="ab-table ab-nonprog-table"><thead>';
 
-    // Row 1: Headers with frozen columns (4) merged + quarterly + Combined + Remarks — all maroon
+    // Row 1: Headers with frozen columns (4) merged + year-grouped quarterly + Grand Total + Remarks
     html += '<tr class="ab-header-row-1">' +
       '<th colspan="4" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Particulars</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>';
-    quarters.forEach(function(q, qi) {
-      html += '<th colspan="2" class="ab-quarter-header">' + q.quarter + '</th>';
+
+    // Year-grouped headers with nested quarter labels (2 sub-cols per quarter)
+    years.forEach(function(y, yi) {
+      var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+      var colspan = yqList.length * 2;
+      html += '<th colspan="' + colspan + '" class="ab-year-header-cell">' +
+        '<div class="ab-year-top">Year ' + (yi + 1) + '</div>' +
+        '<div class="ab-quarter-row">';
+      yqList.forEach(function(q) {
+        html += '<span class="ab-q-label">' + q.quarter + '</span>';
+      });
+      html += '</div></th>';
     });
-    html += '<th colspan="2" class="ab-quarter-header">Combined</th><th class="ab-quarter-header">&nbsp;</th></tr>';
+
+    // Grand Total column spanning all years
+    html += '<th colspan="' + years.length + '" class="ab-gt-header-cell">' +
+      '<div class="ab-year-top">Grand Total</div>' +
+      '<div class="ab-quarter-row">';
+    years.forEach(function(y, yi) {
+      html += '<span class="ab-q-label">Y' + (yi + 1) + ' Total</span>';
+    });
+    html += '</div></th>';
+
+    html += '<th class="ab-quarter-header">&nbsp;</th></tr>';
 
     // Row 2: Column headers
     html += '<tr class="ab-header-row-2">' +
@@ -604,16 +674,22 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       html += '<th class="ab-subcol ' + qClass + '" style="width:65px;min-width:65px;">Units</th>';
       html += '<th class="ab-subcol ' + qClass + '" style="width:75px;min-width:75px;">Cost</th>';
     });
-    html += '<th class="ab-subcol" style="width:65px;min-width:65px;">Units</th><th class="ab-subcol" style="width:75px;min-width:75px;">Cost</th><th class="ab-remarks-hdr" style="width:100px;min-width:100px;">Remarks</th>';
+
+    // Year total columns
+    years.forEach(function(y, yi) {
+      html += '<th class="ab-gt-subcol" style="width:80px;min-width:80px;">Y' + (yi + 1) + ' Total</th>';
+    });
+
+    html += '<th class="ab-remarks-hdr" style="width:100px;min-width:100px;">Remarks</th>';
     html += '</tr></thead><tbody>';
 
     // Data rows
     rows.forEach(function(row, idx) {
-      html += ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList);
+      html += ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList);
     });
 
     // Section total
-    html += ab_buildNonProgSectionTotal(rows, quarters, secTitle);
+    html += ab_buildNonProgSectionTotal(rows, quarters, years, secTitle);
 
     html += '</tbody></table></div>' +
       '<div style="padding:8px 16px;">' +
@@ -628,7 +704,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
   return html;
 }
 
-function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
+function ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList) {
   var uc = row.unit_cost || 0;
   var qData = row.quarters || {};
   var pbpId = row.pbpName || '';
@@ -658,20 +734,26 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
   html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(totalCost) + '</td>';
 
   // Per-quarter data
-  var combinedCost = 0;
   quarters.forEach(function(q, qi) {
     var u = (qData[qi] || {}).units || 0;
     var c = u * uc;
-    combinedCost += c;
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
 
     html += '<td class="ab-editable ' + qClass + '" style="width:65px;"><input type="number" class="ab-inp ab-np-inp" style="width:55px;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-qi="' + qi + '" value="' + u + '" /></td>' +
             '<td class="ab-calc ' + qClass + '" style="width:75px;">' + ab_fc(c) + '</td>';
   });
 
-  // Combined Total
-  html += '<td class="ab-calc">' + totalUnits + '</td>';
-  html += '<td class="ab-calc">' + ab_fc(combinedCost) + '</td>';
+  // Year total columns (auto-calculated)
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yCost = 0;
+    yqList.forEach(function(q) {
+      var qi = quarters.indexOf(q);
+      var u = (qData[qi] || {}).units || 0;
+      yCost += u * uc;
+    });
+    html += '<td class="ab-gt-cell" style="width:80px;">' + ab_fc(yCost) + '</td>';
+  });
 
   // Remarks
   html += '<td class="ab-editable"><input type="text" class="ab-inp ab-remarks-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.remarks || '') + '" placeholder="Remarks..." /></td>';
@@ -680,7 +762,7 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
   return html;
 }
 
-function ab_buildNonProgSectionTotal(rows, quarters, secTitle) {
+function ab_buildNonProgSectionTotal(rows, quarters, years, secTitle) {
   var html = '<tr class="ab-section-total-row">' +
     '<td class="ab-frozen" style="left:0;width:30px;min-width:30px;"></td>' +
     '<td class="ab-frozen" style="left:30px;width:160px;min-width:160px;text-align:left;font-weight:700;">Section Total</td>' +
@@ -720,9 +802,21 @@ function ab_buildNonProgSectionTotal(rows, quarters, secTitle) {
     html += '<td class="ab-gt-cell ' + qClass + '">' + ab_fc(qCost) + '</td>';
   });
 
-  // Combined Total
-  html += '<td class="ab-gt-cell">' + totalUnits + '</td>';
-  html += '<td class="ab-gt-cell">' + ab_fc(totalCost) + '</td>';
+  // Year total columns
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yTotal = 0;
+    rows.forEach(function(row) {
+      var uc = row.unit_cost || 0;
+      yqList.forEach(function(q) {
+        var qi = quarters.indexOf(q);
+        var u = (row.quarters[qi] || {}).units || 0;
+        yTotal += u * uc;
+      });
+    });
+    html += '<td class="ab-gt-cell">' + ab_fc(yTotal) + '</td>';
+  });
+
   html += '<td class="ab-gt-cell"></td>';
 
   html += '</tr>';
@@ -879,12 +973,26 @@ function ab_recalcRow(inputEl, quarters, years, progData, nonProgData) {
       ci += 4;
     });
 
+    // Recalculate year total cells (after quarterly cells)
+    // ci now points to the first year total cell
+    years.forEach(function(y) {
+      var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+      var yCost = 0;
+      yqList.forEach(function(q) {
+        var qi = quarters.indexOf(q);
+        var qUnits = (row.quarters[qi] || {}).units || 0;
+        yCost += uc * qUnits;
+      });
+      if (cells[ci]) cells[ci].textContent = ab_fc(yCost);
+      ci += 1;
+    });
+
     // Recalculate grand total
-    ab_recalcProgGrandTotal(quarters, progData);
+    ab_recalcProgGrandTotal(quarters, progData, years);
   }
 }
 
-function ab_recalcProgGrandTotal(quarters, progData) {
+function ab_recalcProgGrandTotal(quarters, progData, years) {
   var table = document.querySelector('.ab-prog-table');
   if (!table) return;
   var gtRow = table.querySelector('.ab-grand-total-row');
@@ -940,6 +1048,22 @@ function ab_recalcProgGrandTotal(quarters, progData) {
 
     gci_q += 4;
   });
+
+  // Year total cells
+  var gci_y = 10 + (quarters.length * 4);
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yTotal = 0;
+    dataRows.forEach(function(dr) {
+      var drCells = dr.querySelectorAll('td');
+      var drYCostCell = drCells[gci_y];
+      if (drYCostCell && drYCostCell.textContent) {
+        yTotal += parseFloat(drYCostCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+      }
+    });
+    if (gtCells[gci_y]) gtCells[gci_y].textContent = ab_fc(yTotal);
+    gci_y += 1;
+  });
 }
 
 function ab_recalcNonProgRow(tr, quarters, years) {
@@ -962,19 +1086,29 @@ function ab_recalcNonProgRow(tr, quarters, years) {
 
   // Recalc quarterly costs
   ci = 6;
-  var combinedCost = 0;
   quarters.forEach(function() {
     var u = parseInt(cells[ci].querySelector('input').value) || 0;
     var c = u * uc;
     cells[ci + 1].textContent = ab_fc(c);
-    combinedCost += c;
     ci += 2;
   });
 
-  // Recalc Combined Total
-  ci = 6 + (quarters.length * 2); // After all quarterly columns
-  cells[ci].textContent = totalUnits;
-  cells[ci + 1].textContent = ab_fc(combinedCost);
+  // Recalc year total columns
+  // ci now points to the first year total cell
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yCost = 0;
+    var yCi = 6;
+    quarters.forEach(function(q, qi) {
+      var u = parseInt(cells[yCi].querySelector('input').value) || 0;
+      if (yqList.indexOf(q) >= 0) {
+        yCost += u * uc;
+      }
+      yCi += 2;
+    });
+    if (cells[ci]) cells[ci].textContent = ab_fc(yCost);
+    ci += 1;
+  });
 
   ab_recalcNonProgSectionTotal(tr, quarters, years);
 }
@@ -1026,10 +1160,27 @@ function ab_recalcNonProgSectionTotal(dataRowTr, quarters, years) {
     ci++;
   });
 
-  // Combined Total
-  gtCells[ci].textContent = totalUnits;
-  ci++;
-  gtCells[ci].textContent = ab_fc(totalCost);
+  // Year total columns
+  years.forEach(function(y) {
+    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
+    var yTotal = 0;
+    dataRows.forEach(function(dr) {
+      var drCells = dr.querySelectorAll('td');
+      var ucInp = drCells[3] && drCells[3].querySelector('input');
+      var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
+      var qCi = 6;
+      quarters.forEach(function(q) {
+        if (yqList.indexOf(q) >= 0) {
+          var uInp = drCells[qCi] && drCells[qCi].querySelector('input');
+          var u = uInp ? (parseInt(uInp.value) || 0) : 0;
+          yTotal += u * uc;
+        }
+        qCi += 2;
+      });
+    });
+    gtCells[ci].textContent = ab_fc(yTotal);
+    ci += 1;
+  });
 }
 
 // ============================================================================
@@ -1066,7 +1217,7 @@ function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData
     nonProgData.sections[secTitle].push(newRow);
   }
 
-  var rowHtml = ab_buildNonProgRow(newRow, quarters, newIdx, secTitle, unitsList);
+  var rowHtml = ab_buildNonProgRow(newRow, quarters, years, newIdx, secTitle, unitsList);
   var tempDiv = document.createElement('tbody');
   tempDiv.innerHTML = rowHtml;
   var newTr = tempDiv.querySelector('tr');
@@ -1397,6 +1548,14 @@ function ab_getStyles() {
 .ab-year-header { background: #f5f5f5; font-weight: 700; }
 .ab-year-total-header { background: #f5f5f5; }
 .ab-yt-cell, .ab-yt-subcol { background: #f9f9f9; }
+.ab-year-header-cell { background: #8B1A1A !important; color: white !important; font-weight: 700; padding: 0 !important; vertical-align: top; }
+.ab-year-top { background: rgba(255,255,255,0.15); padding: 2px 4px; text-align: center; font-size: 10px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.2); }
+.ab-quarter-row { display: flex; }
+.ab-q-label { flex: 1; text-align: center; padding: 4px 2px; font-size: 11px; font-weight: 700; }
+.ab-gt-header-cell { background: #F5E6E6 !important; font-weight: 700; padding: 0 !important; vertical-align: top; }
+.ab-gt-header-cell .ab-year-top { background: rgba(139,26,26,0.1); color: #333; }
+.ab-gt-header-cell .ab-q-label { color: #333; font-size: 10px; }
+.ab-gt-subcol { background: #F5E6E6; font-weight: 600; }
 .ab-section { border: 1px solid #ddd; margin-bottom: 12px; border-radius: 4px; overflow: hidden; }
 .ab-section-header { background: #8B1A1A; color: white; padding: 12px 16px; cursor: pointer; font-weight: 700; display: flex; justify-content: space-between; }
 .ab-toggle { cursor: pointer; user-select: none; }
