@@ -444,12 +444,12 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   html += '<thead>';
 
-  // Row 1: Frozen headers (empty) + Convergence span + Quarter spans + Remarks
+  // Row 1: Frozen headers (empty for cols 0-6) + Convergence spanning cols 7-9 + Quarter spans + Remarks
   html += '<tr class="ab-header-row-1">';
-  for (var i = 0; i < 10; i++) {
+  for (var i = 0; i < 7; i++) {
     html += '<th class="ab-frozen-header ab-hdr-r1">&nbsp;</th>';
   }
-  html += '<th colspan="3" class="ab-convergence-header">Convergence</th>';
+  html += '<th colspan="3" class="ab-frozen-header ab-convergence-header">Convergence</th>';
   quarters.forEach(function(q, qi) {
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
     html += '<th colspan="4" class="ab-quarter-header ' + qClass + '">' + q.quarter + '</th>';
