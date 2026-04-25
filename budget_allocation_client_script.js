@@ -472,10 +472,10 @@ function ab_buildProgTab(frm, quarters, years, data) {
   // Quarterly column headers (per quarter)
   quarters.forEach(function(q, qi) {
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">Units to Cover</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">Units</th>';
     html += '<th class="ab-subcol-hdr ' + qClass + '">Cost</th>';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">LIC HFL Contrib</th>';
-    html += '<th class="ab-subcol-hdr ' + qClass + '">Benf Contrib</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">LIC HFL</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">Benf</th>';
   });
 
   html += '<th class="ab-remarks-hdr">Remarks</th>';
@@ -606,7 +606,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
 
     quarters.forEach(function(q, qi) {
       var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
-      html += '<th class="ab-subcol ' + qClass + '">Units to Cover</th>';
+      html += '<th class="ab-subcol ' + qClass + '">Units</th>';
       html += '<th class="ab-subcol ' + qClass + '">Cost</th>';
     });
     html += '<th class="ab-subcol">Units</th><th class="ab-subcol">Cost</th><th class="ab-remarks-hdr">Remarks</th>';
@@ -1371,10 +1371,12 @@ function ab_getStyles() {
 .ab-table { width: max-content; border-collapse: separate; border-spacing: 0; background: white; }
 .ab-table td, .ab-table th { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: center; font-size: 12px; white-space: nowrap; }
 .ab-table thead th { position: sticky; z-index: 9; background: #f5f5f5; }
-.ab-table thead tr:nth-child(1) th { top: 0; }
-.ab-table thead tr:nth-child(2) th { top: 32px; }
+.ab-table thead tr:nth-child(1) th { top: 0; z-index: 11; }
+.ab-table thead tr:nth-child(2) th { top: 33px; z-index: 11; }
 .ab-frozen { position: sticky; z-index: 10; background: #fafafa; }
-.ab-table thead .ab-frozen { z-index: 15 !important; }
+.ab-table thead .ab-frozen { z-index: 20 !important; }
+.ab-table thead tr:nth-child(1) .ab-frozen-header { z-index: 20 !important; top: 0; }
+.ab-table thead tr:nth-child(2) .ab-frozen { top: 33px; }
 .ab-frozen-last { border-right: 2px solid #999; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
 .ab-frozen-header { position: sticky; z-index: 15; background: #f5f5f5; font-weight: 700; }
 .ab-hdr-r1, .ab-hdr-r2, .ab-header-row-1, .ab-header-row-2 { background: #f5f5f5; font-weight: 700; }
@@ -1646,7 +1648,7 @@ function ab_buildProgSheet(frm, quarters, liveData, sc, C_DARK, C_GREY_HDR, C_LI
     var qFill = qi % 2 === 0 ? C_BLUE : C_YELLOW;
     var qColor = qi % 2 === 0 ? C_WHITE : C_DARK;
     hdr4.push(
-      sc('Units to Cover', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
+      sc('Units', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
       sc('Cost', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT }),
       sc('LIC HFL Contribution', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT }),
       sc('Beneficiary Contribution', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT })
@@ -1836,7 +1838,7 @@ function ab_buildNonProgSheet(frm, quarters, liveData, sc, C_DARK, C_GREY_HDR, C
     var qFill = qi % 2 === 0 ? C_BLUE : C_YELLOW;
     var qColor = qi % 2 === 0 ? C_WHITE : C_DARK;
     hdr6.push(
-      sc('Units to Cover', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
+      sc('Units', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
       sc('Cost', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT })
     );
   });
