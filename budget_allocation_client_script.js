@@ -495,8 +495,8 @@ function ab_buildProgRow(row, quarters, idx) {
 
   // Frozen columns (0-4): Sr, Activity, Task Details, UoM, Unit Cost
   html += '<td class="ab-frozen ab-sr" style="left:0px;width:35px;min-width:35px;max-width:35px;">' + (idx + 1) + '</td>';
-  html += '<td class="ab-frozen ab-hover-expand" style="left:35px;width:150px;min-width:150px;max-width:150px;text-align:left;"><span class="ab-hover-content">' + ab_he(row.description) + '</span></td>';
-  html += '<td class="ab-frozen ab-editable ab-hover-expand-input" style="left:185px;width:120px;min-width:120px;max-width:120px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" style="width:110px;" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
+  html += '<td class="ab-frozen" style="left:35px;width:150px;min-width:150px;max-width:150px;text-align:left;padding:0;"><div class="ab-hover-wrap" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '<div class="ab-hover-full">' + ab_he(row.description) + '</div></div></td>';
+  html += '<td class="ab-frozen ab-editable" style="left:185px;width:120px;min-width:120px;max-width:120px;text-align:left;padding:0;"><div class="ab-hover-input-wrap"><input type="text" class="ab-inp ab-task-inp" style="width:110px;" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></div></td>';
   html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;max-width:55px;overflow:hidden;text-overflow:ellipsis;">' + ab_he(row.uomName || 'Numbers') + '</td>';
   html += '<td class="ab-frozen ab-editable ab-frozen-last" style="left:360px;width:75px;min-width:75px;max-width:75px;"><input type="number" class="ab-inp ab-uc-inp" style="width:65px;" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
 
@@ -642,7 +642,7 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
 
   var html = '<tr class="ab-data-row" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-pbp="' + ab_he(pbpId) + '">' +
     '<td class="ab-frozen ab-sr" style="left:0;width:30px;min-width:30px;">' + (idx + 1) + '</td>' +
-    '<td class="ab-frozen ab-editable ab-hover-expand-input" style="left:30px;width:160px;min-width:160px;max-width:160px;text-align:left;"><input type="text" class="ab-inp ab-desc-inp" style="width:150px;text-align:left;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.description) + '" placeholder="Enter particulars..." /></td>' +
+    '<td class="ab-frozen ab-editable" style="left:30px;width:160px;min-width:160px;max-width:160px;text-align:left;padding:0;"><div class="ab-hover-input-wrap"><input type="text" class="ab-inp ab-desc-inp" style="width:150px;text-align:left;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.description) + '" placeholder="Enter particulars..." /></div></td>' +
     '<td class="ab-frozen ab-editable" style="left:190px;width:60px;min-width:60px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:55px;text-align:left;">' + uomOptions + '</select></td>' +
     '<td class="ab-frozen ab-editable ab-frozen-last" style="left:250px;width:75px;min-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
 
@@ -1389,12 +1389,13 @@ function ab_getStyles() {
 .ab-inp:focus { border-color: #8B1A1A; outline: none; box-shadow: 0 0 0 1px rgba(139,26,26,0.2); }
 .ab-task-inp, .ab-remarks-inp { text-align: left; }
 .ab-desc-cell { padding: 6px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ab-hover-expand { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
-.ab-hover-expand:hover { overflow: visible; z-index: 25; }
-.ab-hover-expand:hover .ab-hover-content { position: absolute; left: 0; top: 0; min-width: 100%; width: max-content; max-width: 350px; padding: 6px 10px; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); white-space: normal; word-wrap: break-word; z-index: 25; font-size: 12px; line-height: 1.4; }
-.ab-hover-expand-input { position: relative; overflow: hidden; }
-.ab-hover-expand-input:hover { overflow: visible; z-index: 25; }
-.ab-hover-expand-input:hover input { position: absolute; left: 0; top: 0; width: 280px !important; background: white; border: 1px solid #8B1A1A; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 25; border-radius: 4px; padding: 6px 8px; }
+.ab-hover-wrap { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; cursor: default; }
+.ab-hover-wrap:hover { overflow: visible; }
+.ab-hover-wrap:hover .ab-hover-full { display: block; position: absolute; left: 0; top: -2px; min-width: 100%; width: max-content; max-width: 350px; padding: 6px 10px; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); white-space: normal; word-wrap: break-word; z-index: 30; font-size: 12px; line-height: 1.4; }
+.ab-hover-full { display: none; }
+.ab-hover-input-wrap { display: block; overflow: hidden; position: relative; }
+.ab-hover-input-wrap:hover { overflow: visible; }
+.ab-hover-input-wrap:hover input { position: absolute; left: 0; top: -2px; width: 280px !important; background: white; border: 1px solid #8B1A1A; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 30; border-radius: 4px; padding: 6px 8px; }
 .ab-sr { width: 40px; text-align: center; }
 .ab-gt-cell { background: #F5E6E6; font-weight: 600; }
 .ab-gt-final { font-weight: 700; }
