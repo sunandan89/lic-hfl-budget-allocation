@@ -1,5 +1,5 @@
 // ============================================================================
-// LIC Budget Allocation v8c — Fixed frozen columns in header rows (border-separate fix)
+// LIC Budget Allocation v9 — New column layout with convergence
 // Client Script for Project proposal
 // ============================================================================
 
@@ -258,36 +258,42 @@ function ab_organizeProgData(pbpFull, bhMap, sbhMap, fsMap, quarters, years, act
     if (sbhName !== 'Programmatic Costs') return;
 
     var desc = rec.description || pbpName;
-    var fsKey = ab_normFS(fsMap[rec.fund_source] || '');
 
     if (!activities[desc]) {
       activities[desc] = {
         description: desc,
         assumption: rec.assumption || '',
+        uomName: 'Numbers',
         unit_cost: 0,
-        fundSources: { lic: { pbpName: null, quarters: {} }, govt: { pbpName: null, quarters: {} }, benf: { pbpName: null, quarters: {} } }
+        total_units: 0,
+        govt_contribution: 0,
+        benf_contribution: 0,
+        remarks: '',
+        quarters: {},
+        pbpName: pbpName
       };
       activityOrder.push(desc);
 
       // Initialize all quarters to 0
       for (var i = 0; i < quarters.length; i++) {
-        activities[desc].fundSources.lic.quarters[i] = { units: 0 };
-        activities[desc].fundSources.govt.quarters[i] = { units: 0 };
-        activities[desc].fundSources.benf.quarters[i] = { units: 0 };
+        activities[desc].quarters[i] = { units: 0 };
       }
     }
 
     var act = activities[desc];
-    act.fundSources[fsKey].pbpName = pbpName;
+    act.pbpName = pbpName;
 
-    // Populate quarters from planning_table
+    // Populate quarters from planning_table (sum LIC units as "units to cover")
     (rec.planning_table || []).forEach(function(row) {
       var qi = qIndex[ab_qKey(row.year, row.quarter)];
       if (qi !== undefined) {
-        act.fundSources[fsKey].quarters[qi] = { units: row.unit || 0 };
+        act.quarters[qi] = { units: row.unit || 0 };
         if (row.unit_cost && !act.unit_cost) act.unit_cost = row.unit_cost;
       }
     });
+
+    // Try to extract govt and benf contributions from total_planned_budget if available
+    // For now, default to 0 (these should be entered by user)
   });
 
   // Auto-populate from Activity KPI selections (if any)
@@ -300,23 +306,28 @@ function ab_organizeProgData(pbpFull, bhMap, sbhMap, fsMap, quarters, years, act
       if (!activities[desc]) {
         activities[desc] = {
           description: desc,
-          assumption: kpi.uomName || '',
+          assumption: '',
+          uomName: kpi.uomName || 'Numbers',
           unit_cost: 0,
+          total_units: 0,
+          govt_contribution: 0,
+          benf_contribution: 0,
+          remarks: '',
           activityMasterId: kpi.actId,
           autoPopulated: true,
-          fundSources: { lic: { pbpName: null, quarters: {} }, govt: { pbpName: null, quarters: {} }, benf: { pbpName: null, quarters: {} } }
+          quarters: {},
+          pbpName: null
         };
         activityOrder.push(desc);
 
         // Initialize all quarters to 0
         for (var i = 0; i < quarters.length; i++) {
-          activities[desc].fundSources.lic.quarters[i] = { units: 0 };
-          activities[desc].fundSources.govt.quarters[i] = { units: 0 };
-          activities[desc].fundSources.benf.quarters[i] = { units: 0 };
+          activities[desc].quarters[i] = { units: 0 };
         }
       } else {
-        // Activity exists from PBP — enrich with Activity Master ID
+        // Activity exists from PBP — enrich with Activity Master ID and UoM
         activities[desc].activityMasterId = kpi.actId;
+        activities[desc].uomName = kpi.uomName || activities[desc].uomName;
       }
     });
   }
@@ -415,212 +426,139 @@ function ab_buildHTML(frm, quarters, years, progData, nonProgData, unitsList) {
       '<div style="padding:10px 0;text-align:right;"><button class="btn btn-sm btn-primary ab-save-nonprog-btn">Save Non-Programmatic</button></div>' +
     '</div>' +
     '<div class="ab-footer">' +
-      '<span class="ab-legend"><span style="background:#fffef5;padding:2px 6px;border:1px solid #ddd;">■</span> Editable</span>' +
-      '<span class="ab-legend"><span style="background:#f4f7fa;padding:2px 6px;border:1px solid #ddd;">■</span> Auto-calculated</span>' +
-      '<span class="ab-legend"><span style="background:#fff9e6;padding:2px 6px;border:1px solid #ddd;">■</span> Grand Total</span>' +
-      '<button class="btn btn-sm btn-default ab-download-btn" style="margin-left:auto;border:1px solid #1a5490;color:#1a5490;"><i class="fa fa-download"></i> Download Budget Sheet</button>' +
+      '<span class="ab-legend"><span style="background:#FFFDE7;padding:2px 6px;border:1px solid #ddd;">■</span> Editable</span>' +
+      '<span class="ab-legend"><span style="background:#E8EAF6;padding:2px 6px;border:1px solid #ddd;">■</span> Auto-calculated</span>' +
+      '<span class="ab-legend"><span style="background:#FFF9E6;padding:2px 6px;border:1px solid #ddd;">■</span> Grand Total</span>' +
+      '<button class="btn btn-sm btn-default ab-download-btn" style="margin-left:auto;border:1px solid #8B1A1A;color:#8B1A1A;"><i class="fa fa-download"></i> Download Budget Sheet</button>' +
       '<span class="ab-saved-indicator" id="ab-saved"></span>' +
     '</div>' +
   '</div>';
 }
 
-// ---- Programmatic Tab ----
+// ---- Programmatic Tab (v9 layout) ----
 
 function ab_buildProgTab(frm, quarters, years, data) {
   var rows = data.rows || [];
-  var nq = 7; // 7 subcols per quarter
-  var ny = 5; // 5 year-total subcols
 
-  var html = '<div class="ab-scroll-wrapper"><table class="ab-table ab-prog-table"><thead>';
+  var html = '<div class="ab-scroll-wrapper"><table class="ab-table ab-prog-table" style="border-collapse: separate; border-spacing: 0;">';
 
-  // Row 1: Year spans + Grand Total
-  html += '<tr class="ab-header-row-1">' +
-    '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:40px;min-width:40px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r1" style="left:40px;width:200px;min-width:200px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r1" style="left:240px;width:180px;min-width:180px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r1" style="left:420px;width:80px;min-width:80px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r1" style="left:500px;width:90px;min-width:90px;">&nbsp;</th>';
-  years.forEach(function(y, yi) {
-    var yqCount = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).length;
-    var colspan = yqCount * nq + ny;
-    html += '<th colspan="' + colspan + '" class="ab-year-header ab-year-' + yi + '">Year ' + (yi + 1) + '</th>';
+  html += '<thead>';
+
+  // Row 1: Frozen headers (empty) + Convergence span + Quarter spans + Remarks
+  html += '<tr class="ab-header-row-1">';
+  for (var i = 0; i < 10; i++) {
+    html += '<th class="ab-frozen-header ab-hdr-r1">&nbsp;</th>';
+  }
+  html += '<th colspan="3" class="ab-convergence-header">Convergence</th>';
+  quarters.forEach(function(q, qi) {
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+    html += '<th colspan="4" class="ab-quarter-header ' + qClass + '">' + q.quarter + '</th>';
   });
-  html += '<th colspan="3" class="ab-grand-total-header">Grand Total</th></tr>';
+  html += '<th class="ab-remarks-header">&nbsp;</th></tr>';
 
-  // Row 2: Quarter labels + Year Total label
-  html += '<tr class="ab-header-row-2">' +
-    '<th class="ab-frozen-header ab-hdr-r2" style="left:0;width:40px;min-width:40px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r2" style="left:40px;width:200px;min-width:200px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r2" style="left:240px;width:180px;min-width:180px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r2" style="left:420px;width:80px;min-width:80px;">&nbsp;</th>' +
-    '<th class="ab-frozen-header ab-hdr-r2" style="left:500px;width:90px;min-width:90px;">&nbsp;</th>';
-  years.forEach(function(y, yi) {
-    quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function(q) {
-      html += '<th colspan="7" class="ab-quarter-header ab-year-' + yi + '">' + q.quarter + ' ' + ab_dateRange(q.start_date, q.end_date) + '</th>';
-    });
-    html += '<th colspan="5" class="ab-year-total-header ab-year-' + yi + '">Year ' + (yi + 1) + ' Total</th>';
+  // Row 2: Column headers
+  html += '<tr class="ab-header-row-2">';
+  html += '<th class="ab-frozen ab-sr-hdr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">Sr.</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:40px;width:180px;min-width:180px;">Activity</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:220px;width:160px;min-width:160px;">Task Details</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:380px;width:70px;min-width:70px;">UoM</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:450px;width:90px;min-width:90px;">Unit Cost</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:540px;width:70px;min-width:70px;">Total Units</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:610px;width:100px;min-width:100px;">Total Cost</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:710px;width:120px;min-width:120px;">LIC HFL Contribution</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:830px;width:100px;min-width:100px;">Govt Contrib (₹)</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:930px;width:100px;min-width:100px;">Benf Contrib (₹)</th>';
+
+  // Quarterly column headers (per quarter)
+  quarters.forEach(function(q, qi) {
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">Units to Cover</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">Cost</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">LIC HFL Contrib</th>';
+    html += '<th class="ab-subcol-hdr ' + qClass + '">Benf Contrib</th>';
   });
-  html += '<th colspan="3" class="ab-grand-total-header">&nbsp;</th></tr>';
 
-  // Row 3: Sub-column headers
-  html += '<tr class="ab-header-row-3">' +
-    '<th class="ab-frozen" style="left:0;width:40px;min-width:40px;">Sr.</th>' +
-    '<th class="ab-frozen" style="left:40px;width:200px;min-width:200px;">Activity</th>' +
-    '<th class="ab-frozen" style="left:240px;width:180px;min-width:180px;">Task Details</th>' +
-    '<th class="ab-frozen" style="left:420px;width:80px;min-width:80px;">UoM</th>' +
-    '<th class="ab-frozen" style="left:500px;width:90px;min-width:90px;">Unit Cost</th>';
-
-  years.forEach(function(y, yi) {
-    quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function() {
-      html += '<th class="ab-subcol ab-year-' + yi + '">LIC Units</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">LIC Amt</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">Govt Units</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">Govt Amt</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">Benf Units</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">Benf Amt</th>' +
-              '<th class="ab-subcol ab-year-' + yi + '">Total Amt</th>';
-    });
-    html += '<th class="ab-yt-subcol ab-year-' + yi + '">Total Units</th>' +
-            '<th class="ab-yt-subcol ab-year-' + yi + '">Total Amt</th>' +
-            '<th class="ab-yt-subcol ab-year-' + yi + '">LIC Cont</th>' +
-            '<th class="ab-yt-subcol ab-year-' + yi + '">Govt Cont</th>' +
-            '<th class="ab-yt-subcol ab-year-' + yi + '">Benf Cont</th>';
-  });
-  html += '<th class="ab-gt-subcol">Y1 Total</th><th class="ab-gt-subcol">Y2 Total</th><th class="ab-gt-subcol">Combined</th>';
+  html += '<th class="ab-remarks-hdr">Remarks</th>';
   html += '</tr></thead><tbody>';
 
   // Data rows
   rows.forEach(function(row, idx) {
-    html += ab_buildProgRow(row, quarters, years, idx);
+    html += ab_buildProgRow(row, quarters, idx);
   });
 
   // Grand total row
-  html += ab_buildProgGrandTotal(rows, quarters, years);
+  html += ab_buildProgGrandTotal(rows, quarters);
 
   html += '</tbody></table></div>';
   return html;
 }
 
-function ab_buildProgRow(row, quarters, years, idx) {
-  var uc = row.unit_cost || 0;
-  var lic = row.fundSources.lic;
-  var govt = row.fundSources.govt;
-  var benf = row.fundSources.benf;
+function ab_buildProgRow(row, quarters, idx) {
+  var html = '<tr class="ab-data-row" data-idx="' + idx + '">';
 
-  var html = '<tr class="ab-data-row" data-idx="' + idx + '">' +
-    '<td class="ab-frozen ab-sr" style="left:0;">' + (idx + 1) + '</td>' +
-    '<td class="ab-frozen" style="left:40px;text-align:left;"><div class="ab-desc-cell" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</div></td>' +
-    '<td class="ab-frozen" style="left:240px;text-align:left;">' + ab_he(row.assumption || '') + '</td>' +
-    '<td class="ab-frozen" style="left:420px;">Numbers</td>' +
-    '<td class="ab-frozen ab-editable" style="left:500px;"><input type="number" class="ab-inp ab-uc-inp" data-idx="' + idx + '" value="' + uc + '" /></td>';
+  // Frozen columns (0-9)
+  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">' + (idx + 1) + '</td>';
+  html += '<td class="ab-frozen ab-desc-cell" style="left:40px;width:180px;min-width:180px;text-align:left;" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</td>';
+  html += '<td class="ab-frozen ab-editable" style="left:220px;width:160px;min-width:160px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
+  html += '<td class="ab-frozen" style="left:380px;width:70px;min-width:70px;">' + ab_he(row.uomName || 'Numbers') + '</td>';
+  html += '<td class="ab-frozen ab-editable" style="left:450px;width:90px;min-width:90px;"><input type="number" class="ab-inp ab-uc-inp" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
+  html += '<td class="ab-frozen ab-editable" style="left:540px;width:70px;min-width:70px;"><input type="number" class="ab-inp ab-tu-inp" data-idx="' + idx + '" value="' + (row.total_units || 0) + '" /></td>';
 
-  // Track year totals for grand total cols
-  var yearTotals = [];
+  // Auto-calc: Total Cost = Unit Cost × Total Units
+  var tc = (row.unit_cost || 0) * (row.total_units || 0);
+  html += '<td class="ab-frozen ab-calc" style="left:610px;width:100px;min-width:100px;">' + ab_fc(tc) + '</td>';
 
-  years.forEach(function(y, yi) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yTotalUnits = 0, yLic = 0, yGovt = 0, yBenf = 0;
+  // Auto-calc: Total LIC HFL = Total Cost - Govt - Benf
+  var tlhfl = tc - (row.govt_contribution || 0) - (row.benf_contribution || 0);
+  html += '<td class="ab-frozen ab-calc" style="left:710px;width:120px;min-width:120px;">' + ab_fc(tlhfl) + '</td>';
 
-    yqList.forEach(function(q) {
-      // Find the index of this quarter in the full quarters array
-      var qi = quarters.indexOf(q);
-      var lu = (lic.quarters[qi] || {}).units || 0;
-      var gu = (govt.quarters[qi] || {}).units || 0;
-      var bu = (benf.quarters[qi] || {}).units || 0;
-      var la = lu * uc, ga = gu * uc, ba = bu * uc;
-      var ta = la + ga + ba;
+  html += '<td class="ab-frozen ab-editable" style="left:830px;width:100px;min-width:100px;"><input type="number" class="ab-inp ab-govt-inp" data-idx="' + idx + '" value="' + (row.govt_contribution || 0) + '" /></td>';
+  html += '<td class="ab-frozen ab-editable" style="left:930px;width:100px;min-width:100px;"><input type="number" class="ab-inp ab-benf-inp" data-idx="' + idx + '" value="' + (row.benf_contribution || 0) + '" /></td>';
 
-      yTotalUnits += lu + gu + bu;
-      yLic += la; yGovt += ga; yBenf += ba;
+  // Per-quarter columns (4 per quarter)
+  quarters.forEach(function(q, qi) {
+    var qUnits = (row.quarters[qi] || {}).units || 0;
+    var qCost = (row.unit_cost || 0) * qUnits;
+    var qLicHfl = tlhfl > 0 && (row.total_units || 0) > 0 ? (tlhfl / (row.total_units || 0)) * qUnits : 0;
+    var qBenf = qCost - qLicHfl;
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
 
-      html += '<td class="ab-editable"><input type="number" class="ab-inp" data-idx="' + idx + '" data-fs="lic" data-qi="' + qi + '" value="' + lu + '" /></td>' +
-              '<td class="ab-calc">' + ab_fc(la) + '</td>' +
-              '<td class="ab-editable"><input type="number" class="ab-inp" data-idx="' + idx + '" data-fs="govt" data-qi="' + qi + '" value="' + gu + '" /></td>' +
-              '<td class="ab-calc">' + ab_fc(ga) + '</td>' +
-              '<td class="ab-editable"><input type="number" class="ab-inp" data-idx="' + idx + '" data-fs="benf" data-qi="' + qi + '" value="' + bu + '" /></td>' +
-              '<td class="ab-calc">' + ab_fc(ba) + '</td>' +
-              '<td class="ab-calc ab-total-col">' + ab_fc(ta) + '</td>';
-    });
-
-    var yTotal = yLic + yGovt + yBenf;
-    yearTotals.push(yTotal);
-
-    html += '<td class="ab-yt-cell">' + yTotalUnits + '</td>' +
-            '<td class="ab-yt-cell">' + ab_fc(yTotal) + '</td>' +
-            '<td class="ab-yt-cell">' + ab_fc(yLic) + '</td>' +
-            '<td class="ab-yt-cell">' + ab_fc(yGovt) + '</td>' +
-            '<td class="ab-yt-cell">' + ab_fc(yBenf) + '</td>';
+    html += '<td class="ab-editable ' + qClass + '"><input type="number" class="ab-inp ab-q-units-inp" data-idx="' + idx + '" data-qi="' + qi + '" value="' + qUnits + '" /></td>';
+    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qCost) + '</td>';
+    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qLicHfl) + '</td>';
+    html += '<td class="ab-calc ' + qClass + '">' + ab_fc(qBenf) + '</td>';
   });
 
-  // Grand total: Y1, Y2, Combined
-  var y1 = yearTotals[0] || 0;
-  var y2 = yearTotals[1] || 0;
-  html += '<td class="ab-gt-cell">' + ab_fc(y1) + '</td>' +
-          '<td class="ab-gt-cell">' + ab_fc(y2) + '</td>' +
-          '<td class="ab-gt-cell">' + ab_fc(y1 + y2) + '</td>';
-
+  html += '<td class="ab-editable"><input type="text" class="ab-inp ab-remarks-inp" data-idx="' + idx + '" value="' + ab_he(row.remarks || '') + '" placeholder="Remarks..." /></td>';
   html += '</tr>';
   return html;
 }
 
-function ab_buildProgGrandTotal(rows, quarters, years) {
-  // Sum across all rows
-  var html = '<tr class="ab-grand-total-row">' +
-    '<td class="ab-frozen ab-sr" style="left:0;">GT</td>' +
-    '<td class="ab-frozen" style="left:40px;text-align:left;font-weight:700;">GRAND TOTAL</td>' +
-    '<td class="ab-frozen" style="left:240px;"></td>' +
-    '<td class="ab-frozen" style="left:420px;"></td>' +
-    '<td class="ab-frozen" style="left:500px;"></td>';
+function ab_buildProgGrandTotal(rows, quarters) {
+  var html = '<tr class="ab-grand-total-row">';
 
-  var grandY = [];
+  // Frozen columns (Grand Total label in Sr + Activity cells)
+  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">GT</td>';
+  html += '<td class="ab-frozen" style="left:40px;width:180px;min-width:180px;text-align:left;font-weight:700;">GRAND TOTAL</td>';
+  html += '<td class="ab-frozen" style="left:220px;width:160px;min-width:160px;"></td>';
+  html += '<td class="ab-frozen" style="left:380px;width:70px;min-width:70px;"></td>';
+  html += '<td class="ab-frozen" style="left:450px;width:90px;min-width:90px;"></td>';
+  html += '<td class="ab-frozen" style="left:540px;width:70px;min-width:70px;"></td>';
+  html += '<td class="ab-frozen ab-gt-cell" style="left:610px;width:100px;min-width:100px;">0</td>';
+  html += '<td class="ab-frozen ab-gt-cell" style="left:710px;width:120px;min-width:120px;">0</td>';
+  html += '<td class="ab-frozen ab-gt-cell" style="left:830px;width:100px;min-width:100px;">0</td>';
+  html += '<td class="ab-frozen ab-gt-cell" style="left:930px;width:100px;min-width:100px;">0</td>';
 
-  years.forEach(function(y, yi) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yTotalUnits = 0, yLic = 0, yGovt = 0, yBenf = 0;
-
-    yqList.forEach(function(q) {
-      var qi = quarters.indexOf(q);
-      var qLu = 0, qLa = 0, qGu = 0, qGa = 0, qBu = 0, qBa = 0;
-
-      rows.forEach(function(row) {
-        var uc = row.unit_cost || 0;
-        var lu = (row.fundSources.lic.quarters[qi] || {}).units || 0;
-        var gu = (row.fundSources.govt.quarters[qi] || {}).units || 0;
-        var bu = (row.fundSources.benf.quarters[qi] || {}).units || 0;
-        qLu += lu; qLa += lu * uc;
-        qGu += gu; qGa += gu * uc;
-        qBu += bu; qBa += bu * uc;
-      });
-
-      var qTa = qLa + qGa + qBa;
-      yTotalUnits += qLu + qGu + qBu;
-      yLic += qLa; yGovt += qGa; yBenf += qBa;
-
-      html += '<td class="ab-gt-cell">' + qLu + '</td>' +
-              '<td class="ab-gt-cell">' + ab_fc(qLa) + '</td>' +
-              '<td class="ab-gt-cell">' + qGu + '</td>' +
-              '<td class="ab-gt-cell">' + ab_fc(qGa) + '</td>' +
-              '<td class="ab-gt-cell">' + qBu + '</td>' +
-              '<td class="ab-gt-cell">' + ab_fc(qBa) + '</td>' +
-              '<td class="ab-gt-cell">' + ab_fc(qTa) + '</td>';
-    });
-
-    var yTotal = yLic + yGovt + yBenf;
-    grandY.push(yTotal);
-
-    html += '<td class="ab-gt-cell">' + yTotalUnits + '</td>' +
-            '<td class="ab-gt-cell">' + ab_fc(yTotal) + '</td>' +
-            '<td class="ab-gt-cell">' + ab_fc(yLic) + '</td>' +
-            '<td class="ab-gt-cell">' + ab_fc(yGovt) + '</td>' +
-            '<td class="ab-gt-cell">' + ab_fc(yBenf) + '</td>';
+  // Per-quarter totals
+  quarters.forEach(function(q, qi) {
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+    html += '<td class="ab-gt-cell ' + qClass + '">0</td>';
+    html += '<td class="ab-gt-cell ' + qClass + '">0</td>';
+    html += '<td class="ab-gt-cell ' + qClass + '">0</td>';
+    html += '<td class="ab-gt-cell ' + qClass + '">0</td>';
   });
 
-  var gy1 = grandY[0] || 0;
-  var gy2 = grandY[1] || 0;
-  html += '<td class="ab-gt-cell ab-gt-final">' + ab_fc(gy1) + '</td>' +
-          '<td class="ab-gt-cell ab-gt-final">' + ab_fc(gy2) + '</td>' +
-          '<td class="ab-gt-cell ab-gt-final">' + ab_fc(gy1 + gy2) + '</td>';
-
+  html += '<td class="ab-gt-cell"></td>';
   html += '</tr>';
   return html;
 }
@@ -641,60 +579,44 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       '<div class="ab-section-content"><div class="ab-scroll-wrapper">' +
       '<table class="ab-table ab-nonprog-table"><thead>';
 
-    // Row 1: Year spans
+    // Row 1: Headers with frozen columns + Combined Total + Remarks
     html += '<tr class="ab-header-row-1">' +
       '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:30px;min-width:30px;">&nbsp;</th>' +
       '<th class="ab-frozen-header ab-hdr-r1" style="left:30px;width:180px;min-width:180px;">&nbsp;</th>' +
       '<th class="ab-frozen-header ab-hdr-r1" style="left:210px;width:72px;min-width:72px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:282px;width:70px;min-width:70px;">&nbsp;</th>';
-    years.forEach(function(y, yi) {
-      var yqCount = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).length;
-      html += '<th colspan="' + (yqCount * 2) + '" class="ab-year-header ab-year-' + yi + '">Year ' + (yi + 1) + '</th>';
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:282px;width:80px;min-width:80px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:362px;width:70px;min-width:70px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:432px;width:90px;min-width:90px;">&nbsp;</th>';
+    quarters.forEach(function(q, qi) {
+      var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+      html += '<th colspan="2" class="ab-quarter-header ' + qClass + '">' + q.quarter + '</th>';
     });
-    html += '<th colspan="' + (years.length * 2) + '" class="ab-year-header">Year Totals</th>';
-    html += '<th colspan="3" class="ab-grand-total-header">Grand Total</th></tr>';
+    html += '<th colspan="2" class="ab-combined-header">Combined Total</th><th class="ab-remarks-header">Remarks</th></tr>';
 
-    // Row 2: Quarter labels
+    // Row 2: Column headers
     html += '<tr class="ab-header-row-2">' +
-      '<th class="ab-frozen-header ab-hdr-r2" style="left:0;width:30px;min-width:30px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r2" style="left:30px;width:180px;min-width:180px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r2" style="left:210px;width:72px;min-width:72px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r2" style="left:282px;width:70px;min-width:70px;">&nbsp;</th>';
-    years.forEach(function(y, yi) {
-      quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function(q) {
-        html += '<th colspan="2" class="ab-quarter-header ab-year-' + yi + '">' + q.quarter + '</th>';
-      });
-    });
-    years.forEach(function(y, yi) {
-      html += '<th colspan="2" class="ab-year-total-header ab-year-' + yi + '">Year ' + (yi + 1) + '</th>';
-    });
-    html += '<th colspan="3" class="ab-grand-total-header">&nbsp;</th></tr>';
-
-    // Row 3: Sub-columns
-    html += '<tr class="ab-header-row-3">' +
       '<th class="ab-frozen" style="left:0;width:30px;min-width:30px;">Sr.</th>' +
       '<th class="ab-frozen" style="left:30px;width:180px;min-width:180px;">Particulars</th>' +
       '<th class="ab-frozen" style="left:210px;width:72px;min-width:72px;">UoM</th>' +
-      '<th class="ab-frozen" style="left:282px;width:70px;min-width:70px;">Unit Cost</th>';
+      '<th class="ab-frozen" style="left:282px;width:80px;min-width:80px;">Unit Cost</th>' +
+      '<th class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">Total Units</th>' +
+      '<th class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">Total Cost</th>';
 
-    years.forEach(function(y, yi) {
-      quarters.filter(function(q) { return q.year_sequence === y.year_sequence; }).forEach(function() {
-        html += '<th class="ab-subcol ab-year-' + yi + '">Units</th><th class="ab-subcol ab-year-' + yi + '">Cost</th>';
-      });
+    quarters.forEach(function(q, qi) {
+      var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+      html += '<th class="ab-subcol ' + qClass + '">Units to Cover</th>';
+      html += '<th class="ab-subcol ' + qClass + '">Cost</th>';
     });
-    years.forEach(function(y, yi) {
-      html += '<th class="ab-yt-subcol ab-year-' + yi + '">Units</th><th class="ab-yt-subcol ab-year-' + yi + '">Cost</th>';
-    });
-    html += '<th class="ab-gt-subcol">Y1 Cost</th><th class="ab-gt-subcol">Y2 Cost</th><th class="ab-gt-subcol">Combined</th>';
+    html += '<th class="ab-subcol">Units</th><th class="ab-subcol">Cost</th><th class="ab-remarks-hdr">Remarks</th>';
     html += '</tr></thead><tbody>';
 
     // Data rows
     rows.forEach(function(row, idx) {
-      html += ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList);
+      html += ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList);
     });
 
     // Section total
-    html += ab_buildNonProgSectionTotal(rows, quarters, years, secTitle);
+    html += ab_buildNonProgSectionTotal(rows, quarters, secTitle);
 
     html += '</tbody></table></div>' +
       '<div style="padding:8px 16px;">' +
@@ -709,7 +631,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
   return html;
 }
 
-function ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList) {
+function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
   var uc = row.unit_cost || 0;
   var qData = row.quarters || {};
   var pbpId = row.pbpName || '';
@@ -727,82 +649,84 @@ function ab_buildNonProgRow(row, quarters, years, idx, secTitle, unitsList) {
     '<td class="ab-frozen ab-editable" style="left:210px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:75px;text-align:left;">' + uomOptions + '</select></td>' +
     '<td class="ab-frozen ab-editable" style="left:282px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
 
-  var yearTotals = [];
+  // Total Units (auto-calc)
+  var totalUnits = 0;
+  quarters.forEach(function(q, qi) {
+    totalUnits += (qData[qi] || {}).units || 0;
+  });
+  html += '<td class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">' + totalUnits + '</td>';
 
-  years.forEach(function(y, yi) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yUnits = 0, yCost = 0;
+  // Total Cost (auto-calc)
+  var totalCost = uc * totalUnits;
+  html += '<td class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">' + ab_fc(totalCost) + '</td>';
 
-    yqList.forEach(function(q) {
-      var qi = quarters.indexOf(q);
-      var u = (qData[qi] || {}).units || 0;
-      var c = u * uc;
-      yUnits += u;
-      yCost += c;
+  // Per-quarter data
+  var combinedCost = 0;
+  quarters.forEach(function(q, qi) {
+    var u = (qData[qi] || {}).units || 0;
+    var c = u * uc;
+    combinedCost += c;
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
 
-      html += '<td class="ab-editable"><input type="number" class="ab-inp ab-np-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-qi="' + qi + '" value="' + u + '" /></td>' +
-              '<td class="ab-calc">' + ab_fc(c) + '</td>';
-    });
-
-    yearTotals.push({ units: yUnits, cost: yCost });
+    html += '<td class="ab-editable ' + qClass + '"><input type="number" class="ab-inp ab-np-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-qi="' + qi + '" value="' + u + '" /></td>' +
+            '<td class="ab-calc ' + qClass + '">' + ab_fc(c) + '</td>';
   });
 
-  // Year totals
-  years.forEach(function(y, yi) {
-    html += '<td class="ab-yt-cell">' + yearTotals[yi].units + '</td>' +
-            '<td class="ab-yt-cell">' + ab_fc(yearTotals[yi].cost) + '</td>';
-  });
+  // Combined Total
+  html += '<td class="ab-calc">' + totalUnits + '</td>';
+  html += '<td class="ab-calc">' + ab_fc(combinedCost) + '</td>';
 
-  // Grand total
-  var y1c = (yearTotals[0] || {}).cost || 0;
-  var y2c = (yearTotals[1] || {}).cost || 0;
-  html += '<td class="ab-gt-cell">' + ab_fc(y1c) + '</td>' +
-          '<td class="ab-gt-cell">' + ab_fc(y2c) + '</td>' +
-          '<td class="ab-gt-cell">' + ab_fc(y1c + y2c) + '</td>';
+  // Remarks
+  html += '<td class="ab-editable"><input type="text" class="ab-inp ab-remarks-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.remarks || '') + '" placeholder="Remarks..." /></td>';
 
   html += '</tr>';
   return html;
 }
 
-function ab_buildNonProgSectionTotal(rows, quarters, years, secTitle) {
+function ab_buildNonProgSectionTotal(rows, quarters, secTitle) {
   var html = '<tr class="ab-section-total-row">' +
     '<td class="ab-frozen" style="left:0;"></td>' +
     '<td class="ab-frozen" style="left:30px;text-align:left;font-weight:700;">Section Total</td>' +
     '<td class="ab-frozen" style="left:210px;"></td>' +
     '<td class="ab-frozen" style="left:282px;"></td>';
 
-  var yearTotals = [];
-
-  years.forEach(function(y, yi) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yUnits = 0, yCost = 0;
-
-    yqList.forEach(function(q) {
-      var qi = quarters.indexOf(q);
-      var qUnits = 0, qCost = 0;
-      rows.forEach(function(row) {
-        var u = (row.quarters[qi] || {}).units || 0;
-        qUnits += u;
-        qCost += u * (row.unit_cost || 0);
-      });
-      yUnits += qUnits;
-      yCost += qCost;
-      html += '<td class="ab-gt-cell">' + qUnits + '</td><td class="ab-gt-cell">' + ab_fc(qCost) + '</td>';
+  // Total Units
+  var totalUnits = 0;
+  rows.forEach(function(row) {
+    quarters.forEach(function(q, qi) {
+      totalUnits += (row.quarters[qi] || {}).units || 0;
     });
+  });
+  html += '<td class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">' + totalUnits + '</td>';
 
-    yearTotals.push({ units: yUnits, cost: yCost });
+  // Total Cost
+  var totalCost = 0;
+  rows.forEach(function(row) {
+    var uc = row.unit_cost || 0;
+    quarters.forEach(function(q, qi) {
+      var u = (row.quarters[qi] || {}).units || 0;
+      totalCost += u * uc;
+    });
+  });
+  html += '<td class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">' + ab_fc(totalCost) + '</td>';
+
+  // Per-quarter totals
+  quarters.forEach(function(q, qi) {
+    var qUnits = 0, qCost = 0;
+    rows.forEach(function(row) {
+      var u = (row.quarters[qi] || {}).units || 0;
+      qUnits += u;
+      qCost += u * (row.unit_cost || 0);
+    });
+    var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
+    html += '<td class="ab-gt-cell ' + qClass + '">' + qUnits + '</td>';
+    html += '<td class="ab-gt-cell ' + qClass + '">' + ab_fc(qCost) + '</td>';
   });
 
-  years.forEach(function(y, yi) {
-    html += '<td class="ab-gt-cell">' + yearTotals[yi].units + '</td>' +
-            '<td class="ab-gt-cell">' + ab_fc(yearTotals[yi].cost) + '</td>';
-  });
-
-  var y1c = (yearTotals[0] || {}).cost || 0;
-  var y2c = (yearTotals[1] || {}).cost || 0;
-  html += '<td class="ab-gt-cell ab-gt-final">' + ab_fc(y1c) + '</td>' +
-          '<td class="ab-gt-cell ab-gt-final">' + ab_fc(y2c) + '</td>' +
-          '<td class="ab-gt-cell ab-gt-final">' + ab_fc(y1c + y2c) + '</td>';
+  // Combined Total
+  html += '<td class="ab-gt-cell">' + totalUnits + '</td>';
+  html += '<td class="ab-gt-cell">' + ab_fc(totalCost) + '</td>';
+  html += '<td class="ab-gt-cell"></td>';
 
   html += '</tr>';
   return html;
@@ -859,7 +783,7 @@ function ab_attachEvents(frm, quarters, years, bhMap, sbhMap, sbhRevMap, fsMap, 
     });
   });
 
-  // Save Non-Programmatic button — sequential saves to avoid server conflicts
+  // Save Non-Programmatic button
   var saveNPBtn = document.querySelector('.ab-save-nonprog-btn');
   if (saveNPBtn) {
     saveNPBtn.addEventListener('click', function(e) {
@@ -880,7 +804,7 @@ function ab_attachEvents(frm, quarters, years, bhMap, sbhMap, sbhRevMap, fsMap, 
   if (savePBtn) {
     savePBtn.addEventListener('click', function(e) {
       e.preventDefault();
-      ab_saveProgData(frm, quarters, years, progData, sbhRevMap, fsMap);
+      ab_saveProgData(frm, quarters, years, progData, sbhRevMap);
     });
   }
 
@@ -905,58 +829,65 @@ function ab_recalcRow(inputEl, quarters, years, progData, nonProgData) {
     return;
   }
 
-  // For programmatic rows
+  // For programmatic rows (v9 layout)
   var idx = parseInt(tr.dataset.idx);
   if (!isNaN(idx) && progData.rows[idx]) {
     var row = progData.rows[idx];
-    // Read unit_cost from the input field (cell index 4)
     var cells = tr.querySelectorAll('td');
-    var ucInput = cells[4] && cells[4].querySelector('input');
-    var uc = ucInput ? (parseFloat(ucInput.value) || 0) : (row.unit_cost || 0);
-    row.unit_cost = uc; // Update stored value
-    var ci = 5; // Start after 5 frozen cols
 
-    var yearTotals = [];
+    // Read inputs from frozen columns
+    var ucInp = cells[4] && cells[4].querySelector('input');
+    var uc = ucInp ? (parseFloat(ucInp.value) || 0) : (row.unit_cost || 0);
+    row.unit_cost = uc;
 
-    years.forEach(function(y) {
-      var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-      var yTotalUnits = 0, yLic = 0, yGovt = 0, yBenf = 0;
+    var tuInp = cells[5] && cells[5].querySelector('input');
+    var tu = tuInp ? (parseFloat(tuInp.value) || 0) : (row.total_units || 0);
+    row.total_units = tu;
 
-      yqList.forEach(function(q) {
-        var lu = parseInt(cells[ci].querySelector('input').value) || 0; ci++;
-        cells[ci].textContent = ab_fc(lu * uc); ci++;
-        var gu = parseInt(cells[ci].querySelector('input').value) || 0; ci++;
-        cells[ci].textContent = ab_fc(gu * uc); ci++;
-        var bu = parseInt(cells[ci].querySelector('input').value) || 0; ci++;
-        cells[ci].textContent = ab_fc(bu * uc); ci++;
-        cells[ci].textContent = ab_fc((lu + gu + bu) * uc); ci++;
+    var govtInp = cells[8] && cells[8].querySelector('input');
+    var govt = govtInp ? (parseFloat(govtInp.value) || 0) : (row.govt_contribution || 0);
+    row.govt_contribution = govt;
 
-        yTotalUnits += lu + gu + bu;
-        yLic += lu * uc; yGovt += gu * uc; yBenf += bu * uc;
-      });
+    var benfInp = cells[9] && cells[9].querySelector('input');
+    var benf = benfInp ? (parseFloat(benfInp.value) || 0) : (row.benf_contribution || 0);
+    row.benf_contribution = benf;
 
-      var yTotal = yLic + yGovt + yBenf;
-      yearTotals.push(yTotal);
+    // Update task details and remarks
+    var taskInp = cells[2] && cells[2].querySelector('input');
+    if (taskInp) row.assumption = taskInp.value;
+    var remarksInp = cells[cells.length - 1] && cells[cells.length - 1].querySelector('input');
+    if (remarksInp) row.remarks = remarksInp.value;
 
-      cells[ci].textContent = yTotalUnits; ci++;
-      cells[ci].textContent = ab_fc(yTotal); ci++;
-      cells[ci].textContent = ab_fc(yLic); ci++;
-      cells[ci].textContent = ab_fc(yGovt); ci++;
-      cells[ci].textContent = ab_fc(yBenf); ci++;
+    // Recalculate auto-calc cells
+    var tc = uc * tu; // Total Cost
+    var tlhfl = tc - govt - benf; // Total LIC HFL
+    cells[6].textContent = ab_fc(tc);
+    cells[7].textContent = ab_fc(tlhfl);
+
+    // Recalculate quarterly cells (starting at column 10)
+    var ci = 10;
+    quarters.forEach(function(q, qi) {
+      var qUnitsInp = cells[ci] && cells[ci].querySelector('input');
+      var qUnits = qUnitsInp ? (parseFloat(qUnitsInp.value) || 0) : 0;
+      row.quarters[qi] = { units: qUnits };
+
+      var qCost = uc * qUnits;
+      var qLicHfl = tu > 0 ? (tlhfl / tu) * qUnits : 0;
+      var qBenf = qCost - qLicHfl;
+
+      cells[ci + 1].textContent = ab_fc(qCost);
+      cells[ci + 2].textContent = ab_fc(qLicHfl);
+      cells[ci + 3].textContent = ab_fc(qBenf);
+
+      ci += 4;
     });
 
-    // Grand total cols
-    var y1 = yearTotals[0] || 0, y2 = yearTotals[1] || 0;
-    cells[ci].textContent = ab_fc(y1); ci++;
-    cells[ci].textContent = ab_fc(y2); ci++;
-    cells[ci].textContent = ab_fc(y1 + y2);
+    // Recalculate grand total
+    ab_recalcProgGrandTotal(quarters, progData);
   }
-
-  // Recalculate the programmatic grand total row
-  ab_recalcProgGrandTotal(quarters, years);
 }
 
-function ab_recalcProgGrandTotal(quarters, years) {
+function ab_recalcProgGrandTotal(quarters, progData) {
   var table = document.querySelector('.ab-prog-table');
   if (!table) return;
   var gtRow = table.querySelector('.ab-grand-total-row');
@@ -965,97 +896,89 @@ function ab_recalcProgGrandTotal(quarters, years) {
   if (!dataRows.length) return;
 
   var gtCells = gtRow.querySelectorAll('td');
-  var gci = 5; // Skip 5 frozen cols (Sr, Activity, Task, UoM, UnitCost)
-  var grandY = [];
+  var gci = 6; // Start at Total Cost column
 
-  years.forEach(function(y) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yTotalUnits = 0, yLic = 0, yGovt = 0, yBenf = 0;
+  // Total Cost, Total LIC HFL, Total Govt, Total Benf
+  var sumTc = 0, sumLhfl = 0, sumGovt = 0, sumBenf = 0;
+  dataRows.forEach(function(dr) {
+    var drCells = dr.querySelectorAll('td');
+    var tcCell = drCells[6];
+    var lhflCell = drCells[7];
+    var govtCell = drCells[8] && drCells[8].querySelector('input');
+    var benfCell = drCells[9] && drCells[9].querySelector('input');
 
-    yqList.forEach(function() {
-      var qLu = 0, qLa = 0, qGu = 0, qGa = 0, qBu = 0, qBa = 0;
-      dataRows.forEach(function(dr) {
-        var drCells = dr.querySelectorAll('td');
-        var ucInp = drCells[4] && drCells[4].querySelector('input');
-        var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
-        var licInp = drCells[gci] && drCells[gci].querySelector('input');
-        var govtInp = drCells[gci + 2] && drCells[gci + 2].querySelector('input');
-        var benfInp = drCells[gci + 4] && drCells[gci + 4].querySelector('input');
-        var lu = licInp ? (parseInt(licInp.value) || 0) : 0;
-        var gu = govtInp ? (parseInt(govtInp.value) || 0) : 0;
-        var bu = benfInp ? (parseInt(benfInp.value) || 0) : 0;
-        qLu += lu; qLa += lu * uc;
-        qGu += gu; qGa += gu * uc;
-        qBu += bu; qBa += bu * uc;
-      });
-
-      var qTa = qLa + qGa + qBa;
-      yTotalUnits += qLu + qGu + qBu;
-      yLic += qLa; yGovt += qGa; yBenf += qBa;
-
-      gtCells[gci].textContent = qLu; gci++;
-      gtCells[gci].textContent = ab_fc(qLa); gci++;
-      gtCells[gci].textContent = qGu; gci++;
-      gtCells[gci].textContent = ab_fc(qGa); gci++;
-      gtCells[gci].textContent = qBu; gci++;
-      gtCells[gci].textContent = ab_fc(qBa); gci++;
-      gtCells[gci].textContent = ab_fc(qTa); gci++;
-    });
-
-    var yTotal = yLic + yGovt + yBenf;
-    grandY.push(yTotal);
-
-    gtCells[gci].textContent = yTotalUnits; gci++;
-    gtCells[gci].textContent = ab_fc(yTotal); gci++;
-    gtCells[gci].textContent = ab_fc(yLic); gci++;
-    gtCells[gci].textContent = ab_fc(yGovt); gci++;
-    gtCells[gci].textContent = ab_fc(yBenf); gci++;
+    if (tcCell && tcCell.textContent) sumTc += parseFloat(tcCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+    if (lhflCell && lhflCell.textContent) sumLhfl += parseFloat(lhflCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+    if (govtCell) sumGovt += parseFloat(govtCell.value) || 0;
+    if (benfCell) sumBenf += parseFloat(benfCell.value) || 0;
   });
 
-  var gy1 = grandY[0] || 0, gy2 = grandY[1] || 0;
-  gtCells[gci].textContent = ab_fc(gy1); gci++;
-  gtCells[gci].textContent = ab_fc(gy2); gci++;
-  gtCells[gci].textContent = ab_fc(gy1 + gy2);
+  gtCells[6].textContent = ab_fc(sumTc);
+  gtCells[7].textContent = ab_fc(sumLhfl);
+  gtCells[8].textContent = ab_fc(sumGovt);
+  gtCells[9].textContent = ab_fc(sumBenf);
+
+  // Per-quarter totals
+  var gci_q = 10;
+  quarters.forEach(function() {
+    var qUnits = 0, qCost = 0, qLicHfl = 0, qBenf = 0;
+
+    dataRows.forEach(function(dr) {
+      var drCells = dr.querySelectorAll('td');
+      var qUnitsInp = drCells[gci_q] && drCells[gci_q].querySelector('input');
+      var qCostCell = drCells[gci_q + 1];
+      var qLhflCell = drCells[gci_q + 2];
+      var qBenfCell = drCells[gci_q + 3];
+
+      if (qUnitsInp) qUnits += parseFloat(qUnitsInp.value) || 0;
+      if (qCostCell && qCostCell.textContent) qCost += parseFloat(qCostCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+      if (qLhflCell && qLhflCell.textContent) qLicHfl += parseFloat(qLhflCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+      if (qBenfCell && qBenfCell.textContent) qBenf += parseFloat(qBenfCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+    });
+
+    gtCells[gci_q].textContent = qUnits;
+    gtCells[gci_q + 1].textContent = ab_fc(qCost);
+    gtCells[gci_q + 2].textContent = ab_fc(qLicHfl);
+    gtCells[gci_q + 3].textContent = ab_fc(qBenf);
+
+    gci_q += 4;
+  });
 }
 
 function ab_recalcNonProgRow(tr, quarters, years) {
   var cells = tr.querySelectorAll('td');
-  // Read unit cost from input (cell index 3: Sr=0, Particulars=1, UoM=2, UnitCost=3)
   var ucInput = cells[3] && cells[3].querySelector('input');
   var uc = ucInput ? (parseFloat(ucInput.value) || 0) : 0;
-  var ci = 4; // Start after 4 frozen cols
 
-  var yearTotals = [];
-
-  years.forEach(function(y) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yUnits = 0, yCost = 0;
-
-    yqList.forEach(function(q) {
-      var u = parseInt(cells[ci].querySelector('input').value) || 0; ci++;
-      var c = u * uc;
-      cells[ci].textContent = ab_fc(c); ci++;
-      yUnits += u;
-      yCost += c;
-    });
-
-    yearTotals.push({ units: yUnits, cost: yCost });
+  // Recalc Total Units and Total Cost
+  var totalUnits = 0;
+  var ci = 6; // Start at per-quarter data
+  quarters.forEach(function() {
+    var u = parseInt(cells[ci].querySelector('input').value) || 0;
+    totalUnits += u;
+    ci += 2;
   });
 
-  // Year totals
-  years.forEach(function(y, yi) {
-    cells[ci].textContent = yearTotals[yi].units; ci++;
-    cells[ci].textContent = ab_fc(yearTotals[yi].cost); ci++;
+  cells[4].textContent = totalUnits; // Total Units cell
+  var totalCost = uc * totalUnits;
+  cells[5].textContent = ab_fc(totalCost); // Total Cost cell
+
+  // Recalc quarterly costs
+  ci = 6;
+  var combinedCost = 0;
+  quarters.forEach(function() {
+    var u = parseInt(cells[ci].querySelector('input').value) || 0;
+    var c = u * uc;
+    cells[ci + 1].textContent = ab_fc(c);
+    combinedCost += c;
+    ci += 2;
   });
 
-  // Grand total
-  var y1c = (yearTotals[0] || {}).cost || 0;
-  var y2c = (yearTotals[1] || {}).cost || 0;
-  cells[ci].textContent = ab_fc(y1c); ci++;
-  cells[ci].textContent = ab_fc(y2c); ci++;
-  cells[ci].textContent = ab_fc(y1c + y2c);
+  // Recalc Combined Total
+  ci = 6 + (quarters.length * 2); // After all quarterly columns
+  cells[ci].textContent = totalUnits;
+  cells[ci + 1].textContent = ab_fc(combinedCost);
 
-  // Recalculate section total
   ab_recalcNonProgSectionTotal(tr, quarters, years);
 }
 
@@ -1066,42 +989,50 @@ function ab_recalcNonProgSectionTotal(dataRowTr, quarters, years) {
   if (!totalRow) return;
   var dataRows = tbody.querySelectorAll('.ab-data-row');
   var gtCells = totalRow.querySelectorAll('td');
-  var gci = 4; // Skip 4 frozen cols (Sr, Particulars, UoM, UnitCost)
-  var yearTotals = [];
 
-  years.forEach(function(y) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    var yUnits = 0, yCost = 0;
+  // Total Units and Total Cost across all rows
+  var totalUnits = 0, totalCost = 0;
+  dataRows.forEach(function(dr) {
+    var drCells = dr.querySelectorAll('td');
+    var ucInp = drCells[3] && drCells[3].querySelector('input');
+    var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
 
-    yqList.forEach(function() {
-      var qUnits = 0, qCost = 0;
-      dataRows.forEach(function(dr) {
-        var drCells = dr.querySelectorAll('td');
-        var ucInp = drCells[3] && drCells[3].querySelector('input');
-        var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
-        var uInp = drCells[gci] && drCells[gci].querySelector('input');
-        var u = uInp ? (parseInt(uInp.value) || 0) : 0;
-        qUnits += u;
-        qCost += u * uc;
-      });
-      yUnits += qUnits; yCost += qCost;
-      gtCells[gci].textContent = qUnits; gci++;
-      gtCells[gci].textContent = ab_fc(qCost); gci++;
+    // Sum from each row's quarterly data
+    var ci = 6;
+    quarters.forEach(function() {
+      var u = parseInt(drCells[ci].querySelector('input').value) || 0;
+      totalUnits += u;
+      totalCost += u * uc;
+      ci += 2;
     });
-
-    yearTotals.push({ units: yUnits, cost: yCost });
   });
 
-  years.forEach(function(y, yi) {
-    gtCells[gci].textContent = yearTotals[yi].units; gci++;
-    gtCells[gci].textContent = ab_fc(yearTotals[yi].cost); gci++;
+  gtCells[4].textContent = totalUnits; // Total Units in section total
+  gtCells[5].textContent = ab_fc(totalCost); // Total Cost in section total
+
+  // Quarterly totals
+  var ci = 6;
+  quarters.forEach(function() {
+    var qUnits = 0, qCost = 0;
+    dataRows.forEach(function(dr) {
+      var drCells = dr.querySelectorAll('td');
+      var ucInp = drCells[3] && drCells[3].querySelector('input');
+      var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
+      var uInp = drCells[ci] && drCells[ci].querySelector('input');
+      var u = uInp ? (parseInt(uInp.value) || 0) : 0;
+      qUnits += u;
+      qCost += u * uc;
+    });
+    gtCells[ci].textContent = qUnits;
+    ci++;
+    gtCells[ci].textContent = ab_fc(qCost);
+    ci++;
   });
 
-  var y1c = (yearTotals[0] || {}).cost || 0;
-  var y2c = (yearTotals[1] || {}).cost || 0;
-  gtCells[gci].textContent = ab_fc(y1c); gci++;
-  gtCells[gci].textContent = ab_fc(y2c); gci++;
-  gtCells[gci].textContent = ab_fc(y1c + y2c);
+  // Combined Total
+  gtCells[ci].textContent = totalUnits;
+  ci++;
+  gtCells[ci].textContent = ab_fc(totalCost);
 }
 
 // ============================================================================
@@ -1109,7 +1040,6 @@ function ab_recalcNonProgSectionTotal(dataRowTr, quarters, years) {
 // ============================================================================
 
 function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData, progData, unitsList) {
-  // Find the table for this section
   var sectionEl = null;
   document.querySelectorAll('.ab-section-header').forEach(function(hdr) {
     if (hdr.dataset.section === secTitle) sectionEl = hdr.closest('.ab-section');
@@ -1119,17 +1049,14 @@ function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData
   var tbody = sectionEl.querySelector('tbody');
   if (!tbody) return;
 
-  // Find the section-total row (last row in tbody) to insert before it
   var totalRow = tbody.querySelector('.ab-section-total-row');
-
-  // Determine new row index
   var dataRows = tbody.querySelectorAll('.ab-data-row');
   var newIdx = dataRows.length;
 
-  // Build new row HTML
   var newRow = {
     description: '',
     assumption: '',
+    remarks: '',
     unit_cost: 0,
     pbpName: null,
     quarters: {}
@@ -1138,12 +1065,11 @@ function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData
     newRow.quarters[i] = { units: 0 };
   }
 
-  // Add to nonProgData
   if (nonProgData.sections[secTitle]) {
     nonProgData.sections[secTitle].push(newRow);
   }
 
-  var rowHtml = ab_buildNonProgRow(newRow, quarters, years, newIdx, secTitle, unitsList);
+  var rowHtml = ab_buildNonProgRow(newRow, quarters, newIdx, secTitle, unitsList);
   var tempDiv = document.createElement('tbody');
   tempDiv.innerHTML = rowHtml;
   var newTr = tempDiv.querySelector('tr');
@@ -1154,13 +1080,11 @@ function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData
     tbody.appendChild(newTr);
   }
 
-  // Update Sr numbers
   tbody.querySelectorAll('.ab-data-row').forEach(function(tr, i) {
     var srCell = tr.querySelector('.ab-sr');
     if (srCell) srCell.textContent = i + 1;
   });
 
-  // Wire up events on the new row inputs (recalc only, no auto-save)
   newTr.querySelectorAll('.ab-inp').forEach(function(inp) {
     inp.addEventListener('change', function() {
       ab_recalcRow(this, quarters, years, progData, nonProgData);
@@ -1170,7 +1094,6 @@ function ab_addNonProgRow(frm, secTitle, quarters, years, sbhRevMap, nonProgData
     });
   });
 
-  // Focus the description input
   var descInp = newTr.querySelector('.ab-desc-inp');
   if (descInp) descInp.focus();
 }
@@ -1180,44 +1103,36 @@ function ab_saveNonProgRow(frm, tr, quarters, years, sbhRevMap) {
   var pbpName = tr.dataset.pbp || '';
   var cells = tr.querySelectorAll('td');
 
-  // Read description
   var descInput = tr.querySelector('.ab-desc-inp');
   var description = descInput ? descInput.value.trim() : '';
-  if (!description) return Promise.resolve(); // Don't save rows without a description
+  if (!description) return Promise.resolve();
 
-  // Read UoM
   var uomSelect = tr.querySelector('.ab-uom-sel');
   var uomValue = uomSelect ? uomSelect.value : '';
 
-  // Read unit cost
   var ucInput = tr.querySelector('.ab-uc-inp');
   var unitCost = ucInput ? (parseFloat(ucInput.value) || 0) : 0;
 
-  // Read quarterly units
   var planningRows = [];
-  var ci = 4; // Start after 4 frozen cols
-  years.forEach(function(y) {
-    var yqList = quarters.filter(function(q) { return q.year_sequence === y.year_sequence; });
-    yqList.forEach(function(q) {
-      var uInput = cells[ci] && cells[ci].querySelector('input');
-      var units = uInput ? (parseInt(uInput.value) || 0) : 0;
-      ci += 2; // Skip units cell + cost cell
+  var ci = 6; // After frozen cols + Total Units + Total Cost
+  quarters.forEach(function(q) {
+    var uInput = cells[ci] && cells[ci].querySelector('input');
+    var units = uInput ? (parseInt(uInput.value) || 0) : 0;
+    ci += 2;
 
-      planningRows.push({
-        doctype: 'PBP Child',
-        year: q.year,
-        quarter: q.quarter,
-        timespan: q.quarter,
-        unit: units,
-        unit_cost: unitCost,
-        planned_amount: units * unitCost,
-        start_date: q.start_date,
-        end_date: q.end_date
-      });
+    planningRows.push({
+      doctype: 'PBP Child',
+      year: q.year,
+      quarter: q.quarter,
+      timespan: q.quarter,
+      unit: units,
+      unit_cost: unitCost,
+      planned_amount: units * unitCost,
+      start_date: q.start_date,
+      end_date: q.end_date
     });
   });
 
-  // Get sub-budget head and budget head IDs
   var sbhInfo = sbhRevMap[secTitle] || {};
   if (!sbhInfo.sbhId) {
     console.warn('[AB] No sbh mapping for section:', secTitle);
@@ -1225,7 +1140,6 @@ function ab_saveNonProgRow(frm, tr, quarters, years, sbhRevMap) {
   }
 
   if (pbpName) {
-    // UPDATE existing PBP record
     return frappe.call({ method: 'frappe.client.get', args: { doctype: 'Project Budget Planning', name: pbpName } })
       .then(function(r) {
         if (!r.message) return;
@@ -1238,7 +1152,6 @@ function ab_saveNonProgRow(frm, tr, quarters, years, sbhRevMap) {
       .then(function() { console.log('[AB] Updated PBP:', pbpName); })
       .catch(function(e) { console.error('[AB] Save error:', pbpName, e); });
   } else {
-    // CREATE new PBP record
     var newDoc = {
       doctype: 'Project Budget Planning',
       project_proposal: frm.doc.name,
@@ -1260,7 +1173,6 @@ function ab_saveNonProgRow(frm, tr, quarters, years, sbhRevMap) {
   }
 }
 
-// Save non-prog rows one at a time to avoid server conflicts
 function ab_saveNonProgSequential(frm, rows, idx, quarters, years, sbhRevMap) {
   if (idx >= rows.length) {
     ab_showSaved();
@@ -1276,7 +1188,7 @@ function ab_saveNonProgSequential(frm, rows, idx, quarters, years, sbhRevMap) {
   });
 }
 
-async function ab_saveProgData(frm, quarters, years, progData, sbhRevMap, fsMap) {
+async function ab_saveProgData(frm, quarters, years, progData, sbhRevMap) {
   var rows = progData.rows || [];
   if (!rows.length) { frappe.show_alert({ message: 'No programmatic rows to save', indicator: 'orange' }); return; }
 
@@ -1286,19 +1198,11 @@ async function ab_saveProgData(frm, quarters, years, progData, sbhRevMap, fsMap)
     return;
   }
 
-  // Read current values from the DOM
   var table = document.querySelector('.ab-prog-table');
   if (!table) return;
   var dataRows = table.querySelectorAll('.ab-data-row');
 
   frappe.show_alert({ message: 'Saving programmatic data...', indicator: 'blue' });
-
-  // Reverse-lookup fund source IDs from fsMap
-  var fsIdByKey = {};
-  Object.keys(fsMap).forEach(function(fsId) {
-    var key = ab_normFS(fsMap[fsId]);
-    if (!fsIdByKey[key]) fsIdByKey[key] = fsId;
-  });
 
   var saveCount = 0;
   var errCount = 0;
@@ -1309,99 +1213,79 @@ async function ab_saveProgData(frm, quarters, years, progData, sbhRevMap, fsMap)
     if (!drEl) continue;
     var drCells = drEl.querySelectorAll('td');
 
-    // Read unit cost from input
+    // Read inputs
     var ucInp = drCells[4] && drCells[4].querySelector('input');
     var uc = ucInp ? (parseFloat(ucInp.value) || 0) : 0;
+    var tuInp = drCells[5] && drCells[5].querySelector('input');
+    var tu = tuInp ? (parseFloat(tuInp.value) || 0) : 0;
+    var govtInp = drCells[8] && drCells[8].querySelector('input');
+    var govt = govtInp ? (parseFloat(govtInp.value) || 0) : 0;
+    var benfInp = drCells[9] && drCells[9].querySelector('input');
+    var benf = benfInp ? (parseFloat(benfInp.value) || 0) : 0;
+    var taskInp = drCells[2] && drCells[2].querySelector('input');
+    var task = taskInp ? taskInp.value : '';
+    var remarksInp = drCells[drCells.length - 1] && drCells[drCells.length - 1].querySelector('input');
+    var remarks = remarksInp ? remarksInp.value : '';
 
-    // For each fund source, collect quarterly units and save
-    var fsKeys = ['lic', 'govt', 'benf'];
-    var ci = 5; // Start after 5 frozen cols
+    // Collect quarterly units
+    var planningRows = [];
+    var ci = 10;
+    quarters.forEach(function(q) {
+      var qUnitsInp = drCells[ci] && drCells[ci].querySelector('input');
+      var qUnits = qUnitsInp ? (parseFloat(qUnitsInp.value) || 0) : 0;
+      ci += 4;
 
-    for (var yi = 0; yi < years.length; yi++) {
-      var yqList = quarters.filter(function(q) { return q.year_sequence === years[yi].year_sequence; });
-
-      for (var qj = 0; qj < yqList.length; qj++) {
-        // Read LIC units, skip LIC amt, Govt units, skip Govt amt, Benf units, skip Benf amt, skip Total amt
-        var licInp = drCells[ci] && drCells[ci].querySelector('input');
-        var lu = licInp ? (parseInt(licInp.value) || 0) : 0;
-        // ci+1 = LIC amt (calc)
-        var govtInp = drCells[ci + 2] && drCells[ci + 2].querySelector('input');
-        var gu = govtInp ? (parseInt(govtInp.value) || 0) : 0;
-        // ci+3 = Govt amt (calc)
-        var benfInp = drCells[ci + 4] && drCells[ci + 4].querySelector('input');
-        var bu = benfInp ? (parseInt(benfInp.value) || 0) : 0;
-        // ci+5 = Benf amt, ci+6 = Total amt
-
-        var qi = quarters.indexOf(yqList[qj]);
-
-        // Update in-memory data
-        row.fundSources.lic.quarters[qi] = { units: lu };
-        row.fundSources.govt.quarters[qi] = { units: gu };
-        row.fundSources.benf.quarters[qi] = { units: bu };
-
-        ci += 7;
-      }
-      ci += 5; // Skip year total subcols
-    }
-    row.unit_cost = uc;
-
-    // Save each fund source that has a PBP record or units > 0
-    for (var fi = 0; fi < fsKeys.length; fi++) {
-      var fsKey = fsKeys[fi];
-      var fs = row.fundSources[fsKey];
-      var fsId = fsIdByKey[fsKey];
-
-      // Build planning rows
-      var planningRows = [];
-      quarters.forEach(function(q, qi) {
-        var units = (fs.quarters[qi] || {}).units || 0;
-        planningRows.push({
-          doctype: 'PBP Child',
-          year: q.year,
-          quarter: q.quarter,
-          timespan: q.quarter,
-          unit: units,
-          unit_cost: uc,
-          planned_amount: units * uc,
-          start_date: q.start_date,
-          end_date: q.end_date
-        });
+      var qCost = uc * qUnits;
+      planningRows.push({
+        doctype: 'PBP Child',
+        year: q.year,
+        quarter: q.quarter,
+        timespan: q.quarter,
+        unit: qUnits,
+        unit_cost: uc,
+        planned_amount: qCost,
+        start_date: q.start_date,
+        end_date: q.end_date
       });
+    });
 
-      var totalBudget = planningRows.reduce(function(s, r) { return s + r.planned_amount; }, 0);
+    var totalBudget = planningRows.reduce(function(s, r) { return s + r.planned_amount; }, 0);
 
-      // Only save if there's a PBP record or there are actual units
-      if (fs.pbpName) {
-        try {
-          var r = await frappe.call({ method: 'frappe.client.get', args: { doctype: 'Project Budget Planning', name: fs.pbpName } });
-          if (r.message) {
-            var doc = r.message;
-            doc.planning_table = planningRows;
-            doc.total_planned_budget = totalBudget;
-            await frappe.call({ method: 'frappe.client.save', args: { doc: doc } });
-            saveCount++;
-          }
-        } catch (e) { console.error('[AB] Prog save error:', fs.pbpName, e); errCount++; }
-      } else if (totalBudget > 0 && fsId) {
-        try {
-          var newDoc = {
-            doctype: 'Project Budget Planning',
-            project_proposal: frm.doc.name,
-            donor: 'D-0001',
-            description: row.description,
-            budget_head: progSbh.bhId,
-            sub_budget_head: progSbh.sbhId,
-            fund_source: fsId,
-            total_planned_budget: totalBudget,
-            planning_table: planningRows
-          };
-          var cr = await frappe.call({ method: 'frappe.client.save', args: { doc: newDoc } });
-          if (cr.message) {
-            fs.pbpName = cr.message.name;
-            saveCount++;
-          }
-        } catch (e) { console.error('[AB] Prog create error:', e); errCount++; }
-      }
+    // Save or create PBP record
+    var pbpName = row.pbpName;
+    if (pbpName) {
+      try {
+        var r = await frappe.call({ method: 'frappe.client.get', args: { doctype: 'Project Budget Planning', name: pbpName } });
+        if (r.message) {
+          var doc = r.message;
+          doc.description = row.description;
+          doc.assumption = task;
+          doc.total_planned_budget = totalBudget;
+          doc.planning_table = planningRows;
+          await frappe.call({ method: 'frappe.client.save', args: { doc: doc } });
+          saveCount++;
+        }
+      } catch (e) { console.error('[AB] Prog save error:', pbpName, e); errCount++; }
+    } else if (totalBudget > 0) {
+      try {
+        var newDoc = {
+          doctype: 'Project Budget Planning',
+          project_proposal: frm.doc.name,
+          donor: 'D-0001',
+          description: row.description,
+          budget_head: progSbh.bhId,
+          sub_budget_head: progSbh.sbhId,
+          fund_source: 'D-0001',
+          assumption: task,
+          total_planned_budget: totalBudget,
+          planning_table: planningRows
+        };
+        var cr = await frappe.call({ method: 'frappe.client.save', args: { doc: newDoc } });
+        if (cr.message) {
+          row.pbpName = cr.message.name;
+          saveCount++;
+        }
+      } catch (e) { console.error('[AB] Prog create error:', e); errCount++; }
     }
   }
 
@@ -1420,18 +1304,16 @@ function ab_showSaved() {
 }
 
 // ============================================================================
-// HIDE BUDGET SUMMARY TAB (not yet implemented)
+// HIDE BUDGET SUMMARY TAB
 // ============================================================================
 
 function ab_hideBudgetSummaryTab(frm) {
-  // Hide the Budget Summary tab in Frappe's tab bar
   try {
     var tabLink = document.querySelector('[data-fieldname="custom_budget_summary_tab"]');
     if (tabLink) {
       var tabEl = tabLink.closest('.form-clickable-section') || tabLink.closest('.nav-item') || tabLink;
       if (tabEl) tabEl.style.display = 'none';
     }
-    // Also try the tab content approach used by Frappe v16
     var allTabs = document.querySelectorAll('.form-tabs .nav-link, .form-tabs .tab-link');
     allTabs.forEach(function(tab) {
       if (tab.textContent.trim() === 'Budget Summary') {
@@ -1470,6 +1352,68 @@ function ab_dateRange(s, e) {
 }
 
 // ============================================================================
+// STYLES
+// ============================================================================
+
+function ab_getStyles() {
+  return `
+.ab-container { font-family: Arial, sans-serif; font-size: 13px; color: #333; }
+.ab-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 2px solid #ddd; }
+.ab-tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-weight: 600; color: #666; }
+.ab-tab-active { color: #8B1A1A; border-bottom-color: #8B1A1A; }
+.ab-tab-content { display: block; }
+.ab-tab-content.ab-hidden { display: none; }
+.ab-footer { display: flex; gap: 16px; align-items: center; padding: 12px 0; margin-top: 16px; }
+.ab-legend { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
+.ab-scroll-wrapper { overflow: auto; max-height: 520px; border: 1px solid #ddd; margin: 12px 0; position: relative; }
+.ab-table { width: max-content; border-collapse: separate; border-spacing: 0; background: white; }
+.ab-table td, .ab-table th { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: center; font-size: 12px; white-space: nowrap; }
+.ab-table thead th { position: sticky; z-index: 9; background: #f5f5f5; }
+.ab-table thead tr:nth-child(1) th { top: 0; }
+.ab-table thead tr:nth-child(2) th { top: 32px; }
+.ab-frozen { position: sticky; z-index: 10; background: #fafafa; }
+.ab-table thead .ab-frozen { z-index: 15 !important; }
+.ab-frozen-last { border-right: 2px solid #999; box-shadow: 2px 0 4px rgba(0,0,0,0.08); }
+.ab-frozen-header { position: sticky; z-index: 15; background: #f5f5f5; font-weight: 700; }
+.ab-hdr-r1, .ab-hdr-r2, .ab-header-row-1, .ab-header-row-2 { background: #f5f5f5; font-weight: 700; }
+.ab-convergence-header { background: #8B1A1A !important; color: white !important; font-weight: 700; }
+.ab-quarter-header { background: #8B1A1A !important; color: white !important; font-weight: 700; }
+.ab-remarks-header, .ab-combined-header { background: #f5f5f5; font-weight: 700; }
+.ab-col-hdr, .ab-sr-hdr { background: #f5f5f5; font-weight: 700; }
+.ab-subcol-hdr, .ab-subcol { background: #F5E6E6; font-weight: 600; font-size: 11px; color: #333; }
+.ab-remarks-hdr { background: #f5f5f5; font-weight: 600; font-size: 11px; }
+.ab-q-odd, .ab-q-even { }
+.ab-editable { background: white; }
+.ab-editable input { background: white; }
+.ab-calc { background: #f5f5f5; color: #555; }
+.ab-inp { width: 95%; padding: 5px 8px; border: 1px solid #d1d8dd; border-radius: 3px; font-size: 12px; background: white; }
+.ab-inp:focus { border-color: #8B1A1A; outline: none; box-shadow: 0 0 0 1px rgba(139,26,26,0.2); }
+.ab-task-inp, .ab-remarks-inp { text-align: left; }
+.ab-desc-cell { padding: 6px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-sr { width: 40px; text-align: center; }
+.ab-gt-cell { background: #F5E6E6; font-weight: 600; }
+.ab-gt-final { font-weight: 700; }
+.ab-grand-total-row { background: #F5E6E6; font-weight: 700; border-top: 2px solid #8B1A1A; }
+.ab-grand-total-header { background: #F5E6E6; font-weight: 700; }
+.ab-year-header { background: #f5f5f5; font-weight: 700; }
+.ab-year-total-header { background: #f5f5f5; }
+.ab-yt-cell, .ab-yt-subcol { background: #f9f9f9; }
+.ab-section { border: 1px solid #ddd; margin-bottom: 12px; border-radius: 4px; overflow: hidden; }
+.ab-section-header { background: #8B1A1A; color: white; padding: 12px 16px; cursor: pointer; font-weight: 700; display: flex; justify-content: space-between; }
+.ab-toggle { cursor: pointer; user-select: none; }
+.ab-section-content { display: block; }
+.ab-section-total-row { background: #F5E6E6; font-weight: 700; }
+.ab-add-row-btn { margin-top: 8px; }
+.ab-saved-indicator { color: #8B1A1A; font-weight: 700; display: none; }
+.ab-nonprog-wrapper { }
+.ab-table tbody tr:nth-child(even) td { background: #fafafa; }
+.ab-table tbody tr:nth-child(even) .ab-frozen { background: #f5f5f5; }
+.ab-table tbody tr:nth-child(even) .ab-calc { background: #f0f0f0; }
+.ab-table tbody tr:nth-child(even) .ab-gt-cell { background: #F0DCDC; }
+  `;
+}
+
+// ============================================================================
 // EXCEL EXPORT
 // ============================================================================
 
@@ -1491,7 +1435,7 @@ async function ab_downloadBudget(frm, quarters, years, progData, nonProgData, un
 
     var wb = XLSX.utils.book_new();
 
-    // Color constants matching reference
+    // Color constants
     var C_DARK = '333333';
     var C_GREY_HDR = 'BCBDC0';
     var C_LIGHT_GREY = 'E6E6E6';
@@ -1500,10 +1444,8 @@ async function ab_downloadBudget(frm, quarters, years, progData, nonProgData, un
     var C_BLUE = '00529C';
     var C_WHITE = 'FFFFFF';
     var INR_FMT = '_(₹* #,##0.00_);_(₹* (#,##0.00);_(₹* "-"??_);_(@_)';
-    var PCT_FMT = '0.00%';
     var NUM_FMT = '#,##0';
 
-    // Helper: create styled cell
     function sc(v, opts) {
       opts = opts || {};
       var cell = { v: v, t: typeof v === 'number' ? 'n' : 's' };
@@ -1526,75 +1468,89 @@ async function ab_downloadBudget(frm, quarters, years, progData, nonProgData, un
       return cell;
     }
 
-    // Collect live data from DOM
-    var progLiveData = ab_collectProgDataFromDOM(quarters, years, progData);
-    var nonProgLiveData = ab_collectNonProgDataFromDOM(quarters, years, nonProgData);
+    var progLiveData = ab_collectProgDataFromDOM(quarters, progData);
+    var nonProgLiveData = ab_collectNonProgDataFromDOM(quarters, nonProgData);
 
-    // ---- Sheet 2: Programmatic Costs ----
-    var progSheet = ab_buildProgSheet(frm, quarters, years, progLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT);
+    var summarySheet = ab_buildBudgetSummarySheet(frm, quarters, progLiveData, nonProgLiveData, sc, C_DARK, C_GREY_HDR, C_BLUE, C_YELLOW, C_WHITE, INR_FMT);
+    XLSX.utils.book_append_sheet(wb, summarySheet.ws, 'Budget Summary');
+
+    var progSheet = ab_buildProgSheet(frm, quarters, progLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_BLUE, C_WHITE, INR_FMT, NUM_FMT);
     XLSX.utils.book_append_sheet(wb, progSheet.ws, 'Programmatic Costs');
 
-    // ---- Sheet 3: Non-Programmatic Costs ----
-    var npSheet = ab_buildNonProgSheet(frm, quarters, years, nonProgLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT);
+    var npSheet = ab_buildNonProgSheet(frm, quarters, nonProgLiveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_BLUE, C_WHITE, INR_FMT, NUM_FMT);
     XLSX.utils.book_append_sheet(wb, npSheet.ws, 'Non-Programmatic Costs');
 
-    // ---- Sheet 1: Budget Summary ----
-    var summarySheet = ab_buildSummarySheet(frm, progLiveData, nonProgLiveData, quarters, years, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_WHITE, INR_FMT, PCT_FMT);
-    XLSX.utils.book_append_sheet(wb, summarySheet, 'Budget Summary');
+    // Set sheet protection on Prog and NP sheets
+    if (progSheet.ws) progSheet.ws['!protect'] = { password: '' };
+    if (npSheet.ws) npSheet.ws['!protect'] = { password: '' };
 
-    // Reorder sheets: Budget Summary first
-    wb.SheetNames = ['Budget Summary', 'Programmatic Costs', 'Non-Programmatic Costs'];
+    var filename = frm.doc.name + '_Budget_' + new Date().toISOString().split('T')[0] + '.xlsx';
+    XLSX.writeFile(wb, filename);
 
-    var fname = 'Budget_' + (frm.doc.name || 'Proposal') + '.xlsx';
-    XLSX.writeFile(wb, fname);
-    frappe.show_alert({ message: 'Budget sheet downloaded!', indicator: 'green' });
+    frappe.show_alert({ message: 'Downloaded: ' + filename, indicator: 'green' });
   } catch (err) {
-    console.error('[AB] Excel export error:', err);
-    frappe.show_alert({ message: 'Excel export failed: ' + err.message, indicator: 'red' });
+    console.error('[AB] Download error:', err);
+    frappe.show_alert({ message: 'Error: ' + (err.message || err), indicator: 'red' });
   }
 }
 
-// Collect programmatic data from the live DOM inputs
-function ab_collectProgDataFromDOM(quarters, years, progData) {
+function ab_collectProgDataFromDOM(quarters, progData) {
   var rows = [];
   var table = document.querySelector('.ab-prog-table');
-  if (!table) return { rows: rows, grandTotal: {} };
-
+  if (!table) return { rows: rows };
   var dataRows = table.querySelectorAll('.ab-data-row');
+
   dataRows.forEach(function(tr, idx) {
     var origRow = (progData.rows || [])[idx] || {};
+    var cells = tr.querySelectorAll('td');
     var desc = origRow.description || '';
-    var task = origRow.assumption || '';
-    var ucInp = tr.querySelector('.ab-uc-inp');
+    var task = '';
+    var taskInp = cells[2] && cells[2].querySelector('input');
+    if (taskInp) task = taskInp.value;
+
+    var ucInp = cells[4] && cells[4].querySelector('input');
     var uc = ucInp ? parseFloat(ucInp.value) || 0 : 0;
-    var uom = origRow.uom || 'Numbers';
+
+    var tuInp = cells[5] && cells[5].querySelector('input');
+    var tu = tuInp ? parseFloat(tuInp.value) || 0 : 0;
+
+    var govtInp = cells[8] && cells[8].querySelector('input');
+    var govt = govtInp ? parseFloat(govtInp.value) || 0 : 0;
+
+    var benfInp = cells[9] && cells[9].querySelector('input');
+    var benf = benfInp ? parseFloat(benfInp.value) || 0 : 0;
+
+    var uom = origRow.uomName || 'Numbers';
 
     var qtrData = [];
-    quarters.forEach(function(q, qi) {
-      var licInp = tr.querySelector('input[data-fs="lic"][data-qi="' + qi + '"]');
-      var govtInp = tr.querySelector('input[data-fs="govt"][data-qi="' + qi + '"]');
-      var benfInp = tr.querySelector('input[data-fs="benf"][data-qi="' + qi + '"]');
-      var lu = licInp ? parseFloat(licInp.value) || 0 : 0;
-      var gu = govtInp ? parseFloat(govtInp.value) || 0 : 0;
-      var bu = benfInp ? parseFloat(benfInp.value) || 0 : 0;
-      qtrData.push({ lic: lu, govt: gu, benf: bu });
+    var ci = 10;
+    quarters.forEach(function() {
+      var qUnitsInp = cells[ci] && cells[ci].querySelector('input');
+      var qUnits = qUnitsInp ? parseFloat(qUnitsInp.value) || 0 : 0;
+      var qCostCell = cells[ci + 1];
+      var qCost = qCostCell && qCostCell.textContent ? parseFloat(qCostCell.textContent.replace(/[^0-9.-]/g, '')) || 0 : 0;
+      var qLhflCell = cells[ci + 2];
+      var qLhfl = qLhflCell && qLhflCell.textContent ? parseFloat(qLhflCell.textContent.replace(/[^0-9.-]/g, '')) || 0 : 0;
+      var qBenfCell = cells[ci + 3];
+      var qBenf = qBenfCell && qBenfCell.textContent ? parseFloat(qBenfCell.textContent.replace(/[^0-9.-]/g, '')) || 0 : 0;
+      qtrData.push({ units: qUnits, cost: qCost, licHfl: qLhfl, benf: qBenf });
+      ci += 4;
     });
 
-    rows.push({ description: desc, task: task, uom: uom, unitCost: uc, quarters: qtrData });
+    rows.push({ description: desc, task: task, uom: uom, unitCost: uc, totalUnits: tu, govt: govt, benf: benf, quarters: qtrData });
   });
 
   return { rows: rows };
 }
 
-// Collect non-programmatic data from the live DOM inputs
-function ab_collectNonProgDataFromDOM(quarters, years, nonProgData) {
+function ab_collectNonProgDataFromDOM(quarters, nonProgData) {
   var sections = {};
   var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
 
   sectionOrder.forEach(function(sec) {
     var sRows = [];
     var allTrs = document.querySelectorAll('.ab-nonprog-table .ab-data-row[data-section="' + sec + '"]');
-    allTrs.forEach(function(tr, idx) {
+    allTrs.forEach(function(tr) {
       var descInp = tr.querySelector('.ab-desc-inp');
       var uomSel = tr.querySelector('.ab-uom-sel');
       var ucInp = tr.querySelector('.ab-uc-inp');
@@ -1603,759 +1559,694 @@ function ab_collectNonProgDataFromDOM(quarters, years, nonProgData) {
       var uc = ucInp ? parseFloat(ucInp.value) || 0 : 0;
 
       var qtrUnits = [];
+      var qtrCosts = [];
       quarters.forEach(function(q, qi) {
         var inp = tr.querySelector('.ab-np-inp[data-qi="' + qi + '"]');
-        var u = inp ? parseFloat(inp.value) || 0 : 0;
+        var u = inp ? parseInt(inp.value) || 0 : 0;
         qtrUnits.push(u);
+        qtrCosts.push(u * uc);
       });
 
-      if (desc) sRows.push({ description: desc, uom: uom, unitCost: uc, qtrUnits: qtrUnits });
+      if (desc) sRows.push({ description: desc, uom: uom, unitCost: uc, quarterUnits: qtrUnits, quarterCosts: qtrCosts });
     });
     sections[sec] = sRows;
   });
 
-  return sections;
+  return { sections: sections };
 }
 
-// Build Programmatic Costs sheet
-function ab_buildProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT) {
-  var rows = liveData.rows || [];
+function ab_buildProgSheet(frm, quarters, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_BLUE, C_WHITE, INR_FMT, NUM_FMT) {
+  var ws = {};
   var aoa = [];
   var merges = [];
+  var rows = liveData.rows || [];
 
-  // Row 0: Title
-  var r0 = [sc('', { border: false }), sc('', { border: false }), sc('', { border: false }),
-    sc('Programmatic Costs', { font: { name: 'Arial', sz: 16, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: false })];
-  for (var i = 4; i < 27; i++) r0.push(sc('', { border: false }));
-  aoa.push(r0);
-  // Row 1: empty
-  aoa.push([]);
-  merges.push({ s: { r: 0, c: 3 }, e: { r: 1, c: 9 } });
-
-  // Row 2: Quarter headers spanning across — "Convergence" + Q1..Q4 + Remarks
-  var r2 = [];
-  for (var i = 0; i < 7; i++) r2.push(sc('', { fill: C_LIGHT_GREY }));
-  r2[7] = sc('Convergence', { font: { name: 'Arial', sz: 16, bold: true }, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT });
-  r2[8] = sc('', { fill: C_LIGHT_GREY });
-  r2[9] = sc('', { fill: C_LIGHT_GREY });
-
-  var qColors = [C_BLUE, C_YELLOW, C_BLUE, C_YELLOW];
-  var qFontColors = ['FFFFFF', '000000', 'FFFFFF', '000000'];
-  var qIdx = 0;
-  quarters.forEach(function(q, qi) {
-    var colStart = 10 + qi * 4;
-    r2[colStart] = sc(q.quarter, { font: { name: 'Arial', sz: 16, bold: true, color: { rgb: qFontColors[qIdx % 4] } }, fill: qColors[qIdx % 4], alignment: { horizontal: 'center', vertical: 'center' } });
-    for (var j = 1; j < 4; j++) r2[colStart + j] = sc('', { fill: qColors[qIdx % 4] });
-    merges.push({ s: { r: 2, c: colStart }, e: { r: 2, c: colStart + 3 } });
-    qIdx++;
-  });
-  var remCol = 10 + quarters.length * 4;
-  r2[remCol] = sc('Remarks', { font: { name: 'Arial', sz: 14, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } });
-  merges.push({ s: { r: 2, c: remCol }, e: { r: 3, c: remCol } });
-  aoa.push(r2);
-  merges.push({ s: { r: 2, c: 7 }, e: { r: 2, c: 9 } });
-
-  // Row 3: Sub-column headers
-  var hdrFont = { name: 'Arial', sz: 11, bold: true };
-  var r3 = [
-    sc('Sr. No.', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-    sc('Activity', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-    sc('Task Details (Mandatory)', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-    sc('Unit of Measurement', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-    sc('Unit Cost', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
-    sc('Total Units', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-    sc('Total Cost', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
-    sc('Total LIC HFL Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
-    sc('Government Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }),
-    sc('Beneficiary Contribution', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT })
+  // Column widths (27 columns: A-AA)
+  var cols = [
+    { wch: 8 },   // A: Sr. No.
+    { wch: 25 },  // B: Activity
+    { wch: 25 },  // C: Task Details
+    { wch: 12 },  // D: Unit of Measurement
+    { wch: 12 },  // E: Unit Cost
+    { wch: 12 },  // F: Total Units
+    { wch: 12 }   // G: Total Cost
   ];
-  quarters.forEach(function(q, qi) {
-    var cIdx = qi % 4;
-    var bgC = qColors[cIdx];
-    var fC = qFontColors[cIdx];
-    r3.push(sc('Units to Cover', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }));
-    r3.push(sc('Cost', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
-    r3.push(sc('LIC HFL Contribution', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
-    r3.push(sc('Beneficiary Contribution', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fC } }, fill: bgC, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, numFmt: INR_FMT }));
+  // H-J: Convergence (Total LIC HFL, Govt, Benf)
+  cols.push({ wch: 12 }, { wch: 12 }, { wch: 12 });
+  // Quarterly columns (K-Z): Q1, Q2, Q3, Q4 (4 cols each)
+  quarters.forEach(function() {
+    cols.push({ wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 });
   });
-  r3.push(sc('', {})); // Remarks
-  aoa.push(r3);
+  // AA: Remarks
+  cols.push({ wch: 12 });
+  ws['!cols'] = cols;
 
-  // Data rows
-  var grandTotalUnits = 0, grandLic = 0, grandGovt = 0, grandBenf = 0, grandCost = 0;
-  var grandQtrLic = [], grandQtrBenf = [], grandQtrCost = [];
-  quarters.forEach(function() { grandQtrLic.push(0); grandQtrBenf.push(0); grandQtrCost.push(0); });
+  // Row 1-2: Title (merged D1:J2)
+  aoa.push([sc('', { fill: C_LIGHT_GREY }), sc('', { fill: C_LIGHT_GREY }), sc('', { fill: C_LIGHT_GREY }), sc('Programmatic Costs', { font: { bold: true, sz: 13 }, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }), sc(''), sc(''), sc('')]);
+  merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 2 } }); // A1:C2 merged empty
+  merges.push({ s: { r: 0, c: 3 }, e: { r: 1, c: 9 } }); // D1:J2 merged title
 
+  aoa.push(Array(27).fill(sc('')));
+
+  // Row 3: Group headers
+  var row3 = Array(27).fill(sc(''));
+  row3[7] = sc('Convergence', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 2, c: 7 }, e: { r: 2, c: 9 } }); // H3:J3 merged
+
+  // Quarter headers: K3 Q1, O3 Q2, S3 Q3, W3 Q4
+  var qStartCols = [10, 14, 18, 22]; // K, O, S, W (0-indexed)
+  quarters.forEach(function(q, qi) {
+    var colIdx = qStartCols[qi];
+    row3[colIdx] = sc('Q' + (qi + 1), { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+    merges.push({ s: { r: 2, c: colIdx }, e: { r: 2, c: colIdx + 3 } });
+  });
+
+  row3[26] = sc('Remarks', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 2, c: 26 }, e: { r: 3, c: 26 } }); // AA3:AA4 merged
+  aoa.push(row3);
+
+  // Row 4: Column headers (27 columns)
+  var hdr4 = [
+    sc('Sr. No.', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Activity', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Task Details (Mandatory)', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Unit of Measurement', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Unit Cost', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT }),
+    sc('Total Units', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Total Cost', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT }),
+    sc('Total LIC HFL Contribution', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT }),
+    sc('Government Contribution', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT }),
+    sc('Beneficiary Contribution', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT })
+  ];
+
+  // Quarterly headers
+  quarters.forEach(function(q, qi) {
+    var qFill = qi % 2 === 0 ? C_BLUE : C_YELLOW;
+    var qColor = qi % 2 === 0 ? C_WHITE : C_DARK;
+    hdr4.push(
+      sc('Units to Cover', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
+      sc('Cost', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT }),
+      sc('LIC HFL Contribution', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT }),
+      sc('Beneficiary Contribution', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT })
+    );
+  });
+
+  hdr4.push(sc('Remarks', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }));
+  aoa.push(hdr4);
+
+  // Data rows (Row 5+)
   rows.forEach(function(row, idx) {
-    var uc = row.unitCost || 0;
-    var totalUnits = 0, totalLic = 0, totalGovt = 0, totalBenf = 0;
-    row.quarters.forEach(function(qd) {
-      totalUnits += qd.lic + qd.govt + qd.benf;
-      totalLic += qd.lic * uc;
-      totalGovt += qd.govt * uc;
-      totalBenf += qd.benf * uc;
-    });
-    var totalCost = totalLic + totalGovt + totalBenf;
-    var licContrib = totalCost - totalGovt - totalBenf;
+    var totalCost = row.unitCost * row.totalUnits;
+    var licHflContrib = totalCost - row.govt - row.benf;
 
-    grandTotalUnits += totalUnits;
-    grandLic += licContrib;
-    grandGovt += totalGovt;
-    grandBenf += totalBenf;
-    grandCost += totalCost;
-
-    var fillC = (idx % 2 === 0) ? C_ALT_ROW : C_WHITE;
-    var dataFont = { name: 'Arial', sz: 11 };
-    var dr = [
-      sc(idx + 1, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
-      sc(row.description, { font: dataFont, fill: fillC, alignment: { horizontal: 'left', vertical: 'center' } }),
-      sc(row.task || '', { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'left', vertical: 'top', wrapText: true } }),
-      sc(row.uom || 'Numbers', { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }),
-      sc(uc, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } }),
-      sc(totalUnits, { font: dataFont, fill: fillC }),
-      sc(totalCost, { font: dataFont, fill: fillC, numFmt: INR_FMT }),
-      sc(licContrib, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT }),
-      sc(totalGovt, { font: dataFont, fill: fillC, numFmt: INR_FMT }),
-      sc(totalBenf, { font: dataFont, fill: fillC, numFmt: INR_FMT })
+    var r = [
+      sc(idx + 1, { alignment: { horizontal: 'center' } }),
+      sc(row.description),
+      sc(row.task),
+      sc(row.uom),
+      sc(row.unitCost, { numFmt: INR_FMT }),
+      sc(row.totalUnits),
+      sc(totalCost, { numFmt: INR_FMT }),
+      sc(licHflContrib, { numFmt: INR_FMT }),
+      sc(row.govt, { numFmt: INR_FMT }),
+      sc(row.benf, { numFmt: INR_FMT })
     ];
 
-    row.quarters.forEach(function(qd, qi) {
-      var qUnits = qd.lic + qd.govt + qd.benf;
-      var qCost = qUnits * uc;
-      var qLicAmt = qd.lic * uc;
-      var qBenfAmt = qd.benf * uc;
-      grandQtrLic[qi] += qLicAmt;
-      grandQtrBenf[qi] += qBenfAmt;
-      grandQtrCost[qi] += qCost;
-
-      dr.push(sc(qUnits || '', { font: dataFont }));
-      dr.push(sc(qCost || '', { font: dataFont, numFmt: INR_FMT }));
-      dr.push(sc(qLicAmt || '', { font: dataFont, numFmt: INR_FMT }));
-      dr.push(sc(qBenfAmt || '', { font: dataFont, numFmt: INR_FMT }));
+    // Quarterly data
+    var qData = row.quarters || [];
+    qData.forEach(function(q) {
+      r.push(
+        sc(q.units),
+        sc(q.cost, { numFmt: INR_FMT }),
+        sc(q.licHfl, { numFmt: INR_FMT }),
+        sc(q.benf, { numFmt: INR_FMT })
+      );
     });
-    dr.push(sc('', {})); // Remarks
-    aoa.push(dr);
+
+    r.push(sc(''));
+    aoa.push(r);
   });
 
   // Grand Total row
-  var gtFont = { name: 'Arial', sz: 12, bold: true };
-  var gt = [
-    sc('', { fill: C_YELLOW }),
-    sc('Grand Total', { font: gtFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } }),
-    sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }),
-    sc(grandTotalUnits, { font: gtFont, fill: C_YELLOW }),
-    sc(grandCost, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
-    sc(grandLic, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
-    sc(grandGovt, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }),
-    sc(grandBenf, { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT })
-  ];
-  merges.push({ s: { r: aoa.length, c: 1 }, e: { r: aoa.length, c: 5 } });
-  quarters.forEach(function(q, qi) {
-    gt.push(sc('', { fill: C_YELLOW }));
-    gt.push(sc(grandQtrCost[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
-    gt.push(sc(grandQtrLic[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
-    gt.push(sc(grandQtrBenf[qi], { font: gtFont, fill: C_YELLOW, numFmt: INR_FMT }));
-  });
-  gt.push(sc('', { fill: C_YELLOW }));
-  aoa.push(gt);
+  var gtRow = Array(27).fill(sc(''));
+  gtRow[0] = sc('GT', { font: { bold: true }, fill: C_YELLOW });
+  gtRow[1] = sc('GRAND TOTAL', { font: { bold: true }, fill: C_YELLOW });
 
-  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  var gtTotalCost = 0, gtLicHfl = 0, gtGovt = 0, gtBenf = 0;
+  rows.forEach(function(row) {
+    var tc = row.unitCost * row.totalUnits;
+    gtTotalCost += tc;
+    gtLicHfl += (tc - row.govt - row.benf);
+    gtGovt += row.govt;
+    gtBenf += row.benf;
+  });
+
+  gtRow[6] = sc(gtTotalCost, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+  gtRow[7] = sc(gtLicHfl, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+  gtRow[8] = sc(gtGovt, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+  gtRow[9] = sc(gtBenf, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+
+  // Quarterly totals
+  quarters.forEach(function(q, qi) {
+    var qUnits = 0, qCost = 0, qLicHfl = 0, qBenf = 0;
+    rows.forEach(function(row) {
+      var qd = row.quarters[qi] || {};
+      qUnits += qd.units || 0;
+      qCost += qd.cost || 0;
+      qLicHfl += qd.licHfl || 0;
+      qBenf += qd.benf || 0;
+    });
+    var colBase = 10 + (qi * 4);
+    gtRow[colBase] = sc(qUnits, { fill: C_YELLOW, font: { bold: true } });
+    gtRow[colBase + 1] = sc(qCost, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+    gtRow[colBase + 2] = sc(qLicHfl, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+    gtRow[colBase + 3] = sc(qBenf, { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } });
+  });
+
+  gtRow[26] = sc('', { fill: C_YELLOW });
+  aoa.push(gtRow);
+
+  ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
 
-  // Column widths
-  var cols = [
-    { wch: 5 }, { wch: 30 }, { wch: 35 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 13 }, { wch: 13 }
-  ];
-  quarters.forEach(function() {
-    cols.push({ wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 });
-  });
-  cols.push({ wch: 50 });
-  ws['!cols'] = cols;
-
-  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
-  return { ws: ws, grandLic: grandLic, grandGovt: grandGovt, grandBenf: grandBenf, grandCost: grandCost, grandQtrLic: grandQtrLic, grandQtrCost: grandQtrCost };
+  return { ws: ws };
 }
 
-// Build Non-Programmatic Costs sheet
-function ab_buildNonProgSheet(frm, quarters, years, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_ALT_ROW, C_YELLOW, C_BLUE, C_WHITE, INR_FMT) {
+function ab_buildNonProgSheet(frm, quarters, liveData, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_BLUE, C_WHITE, INR_FMT, NUM_FMT) {
+  var ws = {};
   var aoa = [];
   var merges = [];
-  var sectionLabels = {
-    'Human Resource Costs': { letter: 'A', label: 'Human Resource Costs' },
-    'Administration Costs': { letter: 'B', label: 'Administration Costs' },
-    'NGO Management Costs': { letter: 'C', label: 'NGO Management Costs' }
-  };
+  var rowIdx = 0;
+
+  // Column widths (15 columns: A-O)
+  var cols = [
+    { wch: 8 },   // A: Sr. No.
+    { wch: 20 },  // B: Particulars
+    { wch: 15 },  // C: Unit of Measurement
+    { wch: 12 },  // D: Unit Cost
+    { wch: 12 },  // E: Total Units
+    { wch: 12 }   // F: Total Cost
+  ];
+  // Quarterly columns (G-N): 4 quarters, 2 cols each
+  quarters.forEach(function() {
+    cols.push({ wch: 12 }, { wch: 12 });
+  });
+  // O: Remarks
+  cols.push({ wch: 12 });
+  ws['!cols'] = cols;
+
   var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
-  var totalCols = 6 + quarters.length * 2 + 1; // A..F + Q units/cost pairs + Remarks
+  var sections = liveData.sections || {};
+  var allCosts = {};
+  var allUnits = {};
+  var totalCosts = {};
 
-  // Row 0-3: Top header area (similar to reference)
-  // Row 0: Header with "Cost Component" | Amount | %ge | "Non-Programmatic Costs"
-  var hdrFont16 = { name: 'Arial', sz: 16, bold: true };
-  var hdrFont11 = { name: 'Arial', sz: 11, bold: true };
-  var r0 = [sc('', {}), sc('', {}),
-    sc('Cost Component', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('', {}),
-    sc('Amount', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
-    sc('%ge', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('Non-Programmatic Costs', { font: hdrFont16, alignment: { horizontal: 'center', vertical: 'center' } })
-  ];
-  for (var i = 7; i < totalCols; i++) r0.push(sc('', {}));
-  aoa.push(r0);
-  merges.push({ s: { r: 0, c: 2 }, e: { r: 0, c: 3 } });
-  merges.push({ s: { r: 0, c: 6 }, e: { r: 3, c: 5 + quarters.length * 2 } });
-
-  // Rows 1-3: section summaries (HR, Admin, NGO)
-  var secTotals = {};
-  var grandNP = 0;
+  // Calculate section totals (for summary in rows 1-4)
   sectionOrder.forEach(function(sec) {
-    var sRows = liveData[sec] || [];
-    var t = 0;
-    sRows.forEach(function(r) { t += r.unitCost * r.qtrUnits.reduce(function(a, b) { return a + b; }, 0); });
-    secTotals[sec] = t;
-    grandNP += t;
-  });
-
-  var summaryLabels = ['Human Resource', 'Admin', 'NGO Management'];
-  for (var si = 0; si < 3; si++) {
-    var sec = sectionOrder[si];
-    var r = [sc('', {}), sc('', {}),
-      sc(summaryLabels[si], { font: hdrFont11, alignment: { horizontal: 'left', vertical: 'center' } }),
-      sc('', {}),
-      sc(secTotals[sec], { font: hdrFont11, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
-      sc(grandNP ? secTotals[sec] / grandNP : 0, { font: hdrFont11, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: '0.00%' })
-    ];
-    for (var i = 6; i < totalCols; i++) r.push(sc('', {}));
-    aoa.push(r);
-    merges.push({ s: { r: si + 1, c: 2 }, e: { r: si + 1, c: 3 } });
-  }
-
-  // Row 4: Quarter header spans
-  var r4 = [];
-  for (var i = 0; i < 6; i++) r4.push(sc('', {}));
-  var qColors = [C_BLUE, C_YELLOW, C_BLUE, C_YELLOW];
-  var qFontColors = ['FFFFFF', '000000', 'FFFFFF', '000000'];
-  quarters.forEach(function(q, qi) {
-    var cIdx = qi % 4;
-    var colStart = 6 + qi * 2;
-    r4[colStart] = sc(q.quarter, { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' } });
-    r4[colStart + 1] = sc('', { fill: qColors[cIdx] });
-    merges.push({ s: { r: 4, c: colStart }, e: { r: 4, c: colStart + 1 } });
-  });
-  var remC = 6 + quarters.length * 2;
-  r4[remC] = sc('Remarks', { font: { name: 'Arial', sz: 12, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } });
-  merges.push({ s: { r: 4, c: remC }, e: { r: 5, c: remC } });
-  aoa.push(r4);
-
-  // Row 5: Sub-column headers
-  var r5 = [
-    sc('Sr. No.', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('Particulars', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('Unit of Measurement', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('Unit Cost', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }),
-    sc('Total Units', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('Total Cost', { font: hdrFont11, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT })
-  ];
-  quarters.forEach(function(q, qi) {
-    var cIdx = qi % 4;
-    r5.push(sc('Units to Cover', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' } }));
-    r5.push(sc('Cost', { font: { name: 'Arial', sz: 11, bold: true, color: { rgb: qFontColors[cIdx] } }, fill: qColors[cIdx], alignment: { horizontal: 'center', vertical: 'center' }, numFmt: INR_FMT }));
-  });
-  r5.push(sc('', {})); // Remarks placeholder
-  aoa.push(r5);
-
-  // Data sections
-  var allSectionTotals = { total: 0, qtrCosts: [] };
-  quarters.forEach(function() { allSectionTotals.qtrCosts.push(0); });
-
-  sectionOrder.forEach(function(sec, secIdx) {
-    var info = sectionLabels[sec];
-    var sRows = liveData[sec] || [];
-    var whiteFont = { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
-
-    // Section header row
-    var secHdr = [
-      sc(info.letter, { font: whiteFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } }),
-      sc(info.label, { font: whiteFont, fill: C_DARK, alignment: { horizontal: 'left', vertical: 'center' } })
-    ];
-    for (var i = 2; i < totalCols; i++) secHdr.push(sc('', { fill: C_DARK }));
-    aoa.push(secHdr);
-
-    var secTotal = 0, secQtrCosts = [];
-    quarters.forEach(function() { secQtrCosts.push(0); });
-
-    sRows.forEach(function(row, rIdx) {
-      var totalUnits = row.qtrUnits.reduce(function(a, b) { return a + b; }, 0);
-      var totalCost = totalUnits * row.unitCost;
-      secTotal += totalCost;
-
-      var fillC = (rIdx % 2 === 0) ? C_ALT_ROW : C_WHITE;
-      var dataFont = { name: 'Arial', sz: 11 };
-      var dr = [
-        sc(rIdx + 1, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
-        sc(row.description, { font: { name: 'Arial', sz: 10 }, alignment: { horizontal: 'left', vertical: 'center' } }),
-        sc(row.uom || '', { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
-        sc(row.unitCost, { font: dataFont, numFmt: INR_FMT }),
-        sc(totalUnits, { font: dataFont, fill: fillC, alignment: { horizontal: 'center', vertical: 'center' } }),
-        sc(totalCost, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT })
-      ];
-      quarters.forEach(function(q, qi) {
-        var u = row.qtrUnits[qi] || 0;
-        var c = u * row.unitCost;
-        secQtrCosts[qi] += c;
-        allSectionTotals.qtrCosts[qi] += c;
-        dr.push(sc(u || '', { font: dataFont, alignment: { horizontal: 'center' } }));
-        dr.push(sc(c || '', { font: dataFont, numFmt: INR_FMT }));
-      });
-      dr.push(sc('', {}));
-      aoa.push(dr);
+    allCosts[sec] = 0;
+    allUnits[sec] = 0;
+    totalCosts[sec] = 0;
+    var sRows = sections[sec] || [];
+    sRows.forEach(function(row) {
+      var uc = row.unitCost || 0;
+      var totalUnits = (row.quarterUnits || []).reduce(function(s, u) { return s + u; }, 0);
+      var rowTotal = uc * totalUnits;
+      totalCosts[sec] += rowTotal;
     });
+  });
 
-    // Add empty rows if less than reference template (to match template look)
-    var minRows = sec === 'Human Resource Costs' ? 15 : sec === 'Administration Costs' ? 15 : 5;
-    for (var e = sRows.length; e < minRows; e++) {
-      var er = [sc('', { fill: C_ALT_ROW }), sc('', {})];
-      for (var i = 2; i < totalCols; i++) er.push(sc('', {}));
-      aoa.push(er);
+  // Rows 1-4: Summary block (TOP LEFT)
+  // Row 1
+  aoa.push([
+    sc(''), sc(''),
+    sc('Cost Component', { fill: C_LIGHT_GREY, font: { bold: true }, alignment: { horizontal: 'center' } }),
+    sc('', { fill: C_LIGHT_GREY }),
+    sc('Amount', { fill: C_LIGHT_GREY, font: { bold: true }, alignment: { horizontal: 'center' } }),
+    sc('%ge', { fill: C_LIGHT_GREY, font: { bold: true }, alignment: { horizontal: 'center' } })
+  ]);
+  merges.push({ s: { r: 0, c: 2 }, e: { r: 0, c: 3 } }); // C1:D1 merged "Cost Component"
+  merges.push({ s: { r: 0, c: 6 }, e: { r: 3, c: 14 } }); // G1:O4 merged title block
+  rowIdx++;
+
+  var grandTotal = 0;
+  sectionOrder.forEach(function(sec) { grandTotal += totalCosts[sec]; });
+
+  // Rows 2-4: Section summary rows
+  sectionOrder.forEach(function(sec) {
+    var pct = grandTotal > 0 ? (totalCosts[sec] / grandTotal * 100).toFixed(2) : 0;
+    aoa.push([
+      sc(''), sc(''),
+      sc(sec, { fill: C_LIGHT_GREY, alignment: { horizontal: 'center' } }),
+      sc('', { fill: C_LIGHT_GREY }),
+      sc(totalCosts[sec], { fill: C_LIGHT_GREY, numFmt: INR_FMT, alignment: { horizontal: 'right' } }),
+      sc(pct + '%', { fill: C_LIGHT_GREY, alignment: { horizontal: 'center' } })
+    ]);
+    merges.push({ s: { r: rowIdx, c: 2 }, e: { r: rowIdx, c: 3 } });
+    rowIdx++;
+  });
+
+  // Title block on right (G1:N4)
+  aoa[0][6] = sc('Non-Programmatic Costs', { fill: C_GREY_HDR, font: { bold: true, sz: 12 }, alignment: { horizontal: 'center', vertical: 'center' } });
+
+  // Row 5: Quarter headers (G5-N5)
+  aoa.push(Array(15).fill(sc('')));
+  var row5 = aoa[4];
+  quarters.forEach(function(q, qi) {
+    var colIdx = 6 + (qi * 2); // G=6, I=8, K=10, M=12
+    row5[colIdx] = sc('Q' + (qi + 1), { fill: C_GREY_HDR, font: { bold: true }, alignment: { horizontal: 'center' } });
+    merges.push({ s: { r: 4, c: colIdx }, e: { r: 4, c: colIdx + 1 } });
+  });
+  row5[14] = sc('Remarks', { fill: C_GREY_HDR, font: { bold: true }, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 4, c: 14 }, e: { r: 5, c: 14 } }); // O5:O6 merged
+  rowIdx++;
+
+  // Row 6: Column headers
+  var hdr6 = [
+    sc('Sr. No.', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Particulars', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Unit of Measurement', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Unit Cost', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT }),
+    sc('Total Units', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }),
+    sc('Total Cost', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } }, numFmt: INR_FMT })
+  ];
+
+  quarters.forEach(function(q, qi) {
+    var qFill = qi % 2 === 0 ? C_BLUE : C_YELLOW;
+    var qColor = qi % 2 === 0 ? C_WHITE : C_DARK;
+    hdr6.push(
+      sc('Units to Cover', { fill: qFill, font: { bold: true, color: { rgb: qColor } } }),
+      sc('Cost', { fill: qFill, font: { bold: true, color: { rgb: qColor } }, numFmt: INR_FMT })
+    );
+  });
+
+  hdr6.push(sc('Remarks', { fill: C_GREY_HDR, font: { bold: true, color: { rgb: C_DARK } } }));
+  aoa.push(hdr6);
+  rowIdx++;
+
+  // Section data tables
+  sectionOrder.forEach(function(sec) {
+    // Section header row
+    aoa.push([
+      sc('A', { fill: C_DARK, font: { bold: true, color: { rgb: C_WHITE } } }),
+      sc(sec, { fill: C_DARK, font: { bold: true, color: { rgb: C_WHITE } } })
+    ]);
+    // Fill rest with empty cells
+    for (var i = 2; i < 15; i++) {
+      aoa[rowIdx].push(sc('', { fill: C_DARK }));
     }
+    rowIdx++;
+
+    var sRows = sections[sec] || [];
+    sRows.forEach(function(row, idx) {
+      var totalUnits = (row.quarterUnits || []).reduce(function(s, u) { return s + u; }, 0);
+      var totalCost = row.unitCost * totalUnits;
+
+      var r = [
+        sc(idx + 1, { alignment: { horizontal: 'center' } }),
+        sc(row.description),
+        sc(row.uom),
+        sc(row.unitCost, { numFmt: INR_FMT }),
+        sc(totalUnits),
+        sc(totalCost, { numFmt: INR_FMT })
+      ];
+
+      // Quarterly data
+      (row.quarterUnits || []).forEach(function(u, qi) {
+        r.push(
+          sc(u),
+          sc(u * row.unitCost, { numFmt: INR_FMT })
+        );
+      });
+
+      r.push(sc(''));
+      aoa.push(r);
+      rowIdx++;
+    });
 
     // Section total row
-    var totLabel = 'TOTAL (' + info.letter + ')';
-    var totFont = { name: 'Arial', sz: 12, bold: true };
-    var totRow = [
-      sc('', { fill: C_GREY_HDR }),
-      sc(totLabel, { font: totFont, fill: C_GREY_HDR, alignment: { horizontal: 'left', vertical: 'center' } }),
-      sc('', { fill: C_GREY_HDR }), sc('', { fill: C_GREY_HDR }), sc('', { fill: C_GREY_HDR }),
-      sc(secTotal, { font: totFont, fill: C_GREY_HDR, numFmt: INR_FMT })
+    var stotal = [
+      sc(''),
+      sc('TOTAL(' + sec.charAt(0).toUpperCase() + ')', { font: { bold: true }, fill: C_LIGHT_GREY })
     ];
-    quarters.forEach(function(q, qi) {
-      totRow.push(sc('', { fill: C_GREY_HDR }));
-      totRow.push(sc(secQtrCosts[qi], { font: totFont, fill: C_GREY_HDR, numFmt: INR_FMT }));
-    });
-    totRow.push(sc('', { fill: C_GREY_HDR }));
-    aoa.push(totRow);
+    for (var i = 2; i < 6; i++) stotal.push(sc('', { fill: C_LIGHT_GREY }));
 
-    allSectionTotals.total += secTotal;
+    quarters.forEach(function(q, qi) {
+      var qUnits = 0, qCost = 0;
+      sRows.forEach(function(row) {
+        qUnits += row.quarterUnits[qi] || 0;
+        qCost += (row.quarterUnits[qi] || 0) * row.unitCost;
+      });
+      stotal.push(
+        sc(qUnits, { fill: C_LIGHT_GREY, font: { bold: true } }),
+        sc(qCost, { numFmt: INR_FMT, fill: C_LIGHT_GREY, font: { bold: true } })
+      );
+    });
+
+    stotal.push(sc('', { fill: C_LIGHT_GREY }));
+    aoa.push(stotal);
+    rowIdx++;
   });
 
   // Grand Total row
-  var gtFont = { name: 'Arial', sz: 14, bold: true };
-  var grandRow = [
-    sc('Grand Total', { font: gtFont, fill: C_YELLOW, alignment: { horizontal: 'center', vertical: 'center' } }),
-    sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }), sc('', { fill: C_YELLOW }),
-    sc(allSectionTotals.total, { font: { name: 'Arial', sz: 12, bold: true }, fill: C_YELLOW, numFmt: INR_FMT })
+  var gtRow = [
+    sc(''),
+    sc('Grand Total', { font: { bold: true }, fill: C_YELLOW })
   ];
-  merges.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: 4 } });
-  quarters.forEach(function(q, qi) {
-    grandRow.push(sc('', { fill: C_YELLOW }));
-    grandRow.push(sc(allSectionTotals.qtrCosts[qi], { font: { name: 'Arial', sz: 11 }, fill: C_YELLOW, numFmt: INR_FMT }));
-  });
-  grandRow.push(sc('', { fill: C_YELLOW }));
-  aoa.push(grandRow);
+  for (var i = 2; i < 6; i++) gtRow.push(sc('', { fill: C_YELLOW }));
 
-  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  var gtQtrCosts = Array(quarters.length).fill(0);
+  sectionOrder.forEach(function(sec) {
+    var sRows = sections[sec] || [];
+    sRows.forEach(function(row) {
+      (row.quarterUnits || []).forEach(function(u, qi) {
+        gtQtrCosts[qi] += u * row.unitCost;
+      });
+    });
+  });
+
+  quarters.forEach(function(q, qi) {
+    gtRow.push(
+      sc(0, { fill: C_YELLOW }),
+      sc(gtQtrCosts[qi], { numFmt: INR_FMT, fill: C_YELLOW, font: { bold: true } })
+    );
+  });
+
+  gtRow.push(sc('', { fill: C_YELLOW }));
+  aoa.push(gtRow);
+
+  ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
 
-  var cols = [
-    { wch: 5 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 18 }
-  ];
-  quarters.forEach(function() { cols.push({ wch: 10 }, { wch: 16 }); });
-  cols.push({ wch: 50 });
-  ws['!cols'] = cols;
-
-  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
-  return { ws: ws, sectionTotals: secTotals, grandTotal: allSectionTotals.total, qtrCosts: allSectionTotals.qtrCosts };
+  return { ws: ws };
 }
 
-// Build Budget Summary sheet
-function ab_buildSummarySheet(frm, progLiveData, nonProgLiveData, quarters, years, sc, C_DARK, C_GREY_HDR, C_LIGHT_GREY, C_YELLOW, C_WHITE, INR_FMT, PCT_FMT) {
+function ab_buildBudgetSummarySheet(frm, quarters, progData, nonProgData, sc, C_DARK, C_GREY_HDR, C_BLUE, C_YELLOW, C_WHITE, INR_FMT) {
+  var ws = {};
   var aoa = [];
   var merges = [];
 
-  // Calculate totals
-  var progRows = progLiveData.rows || [];
-  var progTotal = 0, progLic = 0, progGovt = 0, progBenf = 0;
-  var progQtrCosts = [];
-  quarters.forEach(function() { progQtrCosts.push(0); });
+  // Column widths (13 columns: A-M)
+  ws['!cols'] = [{ wch: 3 }, { wch: 3 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 3 }, { wch: 3 }, { wch: 3 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
 
-  progRows.forEach(function(row) {
-    var uc = row.unitCost || 0;
-    row.quarters.forEach(function(qd, qi) {
-      var qCost = (qd.lic + qd.govt + qd.benf) * uc;
-      progTotal += qCost;
-      progLic += qd.lic * uc;
-      progGovt += qd.govt * uc;
-      progBenf += qd.benf * uc;
-      progQtrCosts[qi] += qCost;
+  // Row 1: Title (G1:M2)
+  aoa.push(Array(13).fill(sc('')));
+  merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 5 } }); // A1:F2 merged empty
+  aoa[0][6] = sc('Proposed Budget Statement - Summary Sheet', { font: { bold: true, sz: 12 }, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
+  merges.push({ s: { r: 0, c: 6 }, e: { r: 1, c: 12 } }); // G1:M2 merged title
+
+  aoa.push(Array(13).fill(sc('')));
+  aoa.push(Array(13).fill(sc(''))); // Row 3: blank
+
+  var rowIdx = 3;
+
+  // Row 4: "Project Details" header (B4, merged B4:H4) and "Cost Per Beneficiary" (J4, merged J4:L4)
+  var row4 = Array(13).fill(sc(''));
+  row4[1] = sc('Project Details', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row4[9] = sc('Cost Per Beneficiary', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 3, c: 1 }, e: { r: 3, c: 7 } }); // B4:H4
+  merges.push({ s: { r: 3, c: 9 }, e: { r: 3, c: 11 } }); // J4:L4
+  aoa.push(row4);
+  rowIdx++;
+
+  // Row 5: Name of Project
+  var progTotal = (progData.rows || []).reduce(function(s, r) { return s + (r.unitCost * r.totalUnits); }, 0);
+  var hrTotal = (nonProgData.sections['Human Resource Costs'] || []).reduce(function(s, r) {
+    var tu = (r.quarterUnits || []).reduce(function(sum, u) { return sum + u; }, 0);
+    return s + (r.unitCost * tu);
+  }, 0);
+  var adminTotal = (nonProgData.sections['Administration Costs'] || []).reduce(function(s, r) {
+    var tu = (r.quarterUnits || []).reduce(function(sum, u) { return sum + u; }, 0);
+    return s + (r.unitCost * tu);
+  }, 0);
+  var ngoTotal = (nonProgData.sections['NGO Management Costs'] || []).reduce(function(s, r) {
+    var tu = (r.quarterUnits || []).reduce(function(sum, u) { return sum + u; }, 0);
+    return s + (r.unitCost * tu);
+  }, 0);
+  var grandTotal = progTotal + hrTotal + adminTotal + ngoTotal;
+
+  var row5 = Array(13).fill(sc(''));
+  row5[1] = sc('I');
+  row5[2] = sc('Name of the Project', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 4, c: 2 }, e: { r: 4, c: 4 } }); // C5:E5
+  row5[5] = sc(frm.doc.project_name || '', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 4, c: 5 }, e: { r: 4, c: 7 } }); // F5:H5
+  row5[9] = sc('Total Project Costs');
+  row5[10] = sc(grandTotal, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  merges.push({ s: { r: 4, c: 10 }, e: { r: 4, c: 11 } }); // K5:L5
+  aoa.push(row5);
+  rowIdx++;
+
+  // Row 6: Project Duration
+  var totalBenef = frm.doc.total_beneficiaries || 0;
+  var row6 = Array(13).fill(sc(''));
+  row6[1] = sc('II');
+  row6[2] = sc('Project Duration', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 5, c: 2 }, e: { r: 5, c: 4 } }); // C6:E6
+  row6[5] = sc(frm.doc.start_date || '', { alignment: { horizontal: 'left' } });
+  row6[6] = sc('TO');
+  row6[7] = sc(frm.doc.end_date || '', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 5, c: 5 }, e: { r: 5, c: 7 } }); // F6:H6
+  row6[9] = sc('Total Beneficiaries');
+  row6[10] = sc(totalBenef);
+  row6[11] = sc('Individuals');
+  aoa.push(row6);
+  rowIdx++;
+
+  // Row 7: Project Intervention States
+  var row7 = Array(13).fill(sc(''));
+  row7[1] = sc('III');
+  row7[2] = sc('Project Intervention States', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 6, c: 2 }, e: { r: 6, c: 4 } }); // C7:E7
+  row7[5] = sc(frm.doc.state || '', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 6, c: 5 }, e: { r: 6, c: 7 } }); // F7:H7
+  row7[9] = sc('Cost per Beneficiary');
+  row7[10] = sc(totalBenef > 0 ? grandTotal / totalBenef : 0, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  merges.push({ s: { r: 6, c: 10 }, e: { r: 6, c: 11 } }); // K7:L7
+  aoa.push(row7);
+  rowIdx++;
+
+  // Row 8: No. of Intervention Site
+  var row8 = Array(13).fill(sc(''));
+  row8[1] = sc('IV');
+  row8[2] = sc('No. of Intervention Site', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 7, c: 2 }, e: { r: 7, c: 4 } }); // C8:E8
+  row8[5] = sc('', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 7, c: 5 }, e: { r: 7, c: 7 } }); // F8:H8
+  aoa.push(row8);
+  rowIdx++;
+
+  // Row 9: Implementing Partner
+  var row9 = Array(13).fill(sc(''));
+  row9[1] = sc('V');
+  row9[2] = sc('Implementing Partner', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 8, c: 2 }, e: { r: 8, c: 4 } }); // C9:E9
+  row9[5] = sc(frm.doc.ngo || '', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 8, c: 5 }, e: { r: 8, c: 7 } }); // F9:H9
+  aoa.push(row9);
+  rowIdx++;
+
+  // Row 10: blank
+  aoa.push(Array(13).fill(sc('')));
+  rowIdx++;
+
+  // Row 11: "Budget Breakup" header (B11, merged B11:G11)
+  var row11 = Array(13).fill(sc(''));
+  row11[1] = sc('Budget Breakup', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 6 } }); // B11:G11
+  aoa.push(row11);
+  rowIdx++;
+
+  // Row 12: "A" + "DIRECT COSTS" header
+  var row12 = Array(13).fill(sc(''));
+  row12[1] = sc('A');
+  row12[2] = sc('DIRECT COSTS', { font: { bold: true }, fill: C_GREY_HDR });
+  merges.push({ s: { r: 11, c: 2 }, e: { r: 11, c: 4 } }); // C12:E12
+  row12[5] = sc('Amount', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row12[6] = sc('%ge', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row12[9] = sc('Quarterly Breakup of Costs', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 11, c: 9 }, e: { r: 11, c: 11 } }); // J12:L12
+  aoa.push(row12);
+  rowIdx++;
+
+  // Calculate quarterly costs for prog and NP
+  var progQtrCosts = Array(quarters.length).fill(0);
+  var npQtrCosts = Array(quarters.length).fill(0);
+
+  (progData.rows || []).forEach(function(row) {
+    (row.quarters || []).forEach(function(q, qi) {
+      progQtrCosts[qi] += q.cost || 0;
     });
   });
 
-  var hrTotal = 0, adminTotal = 0, ngoTotal = 0, npTotal = 0;
-  var npQtrCosts = [];
-  quarters.forEach(function() { npQtrCosts.push(0); });
-  var sectionOrder = ['Human Resource Costs', 'Administration Costs', 'NGO Management Costs'];
-  sectionOrder.forEach(function(sec) {
-    var sRows = nonProgLiveData[sec] || [];
-    var t = 0;
-    sRows.forEach(function(r) {
-      r.qtrUnits.forEach(function(u, qi) {
-        var c = u * r.unitCost;
-        t += c;
-        npQtrCosts[qi] += c;
+  Object.keys(nonProgData.sections || {}).forEach(function(sec) {
+    (nonProgData.sections[sec] || []).forEach(function(row) {
+      (row.quarterUnits || []).forEach(function(u, qi) {
+        npQtrCosts[qi] += u * row.unitCost;
       });
     });
-    if (sec === 'Human Resource Costs') hrTotal = t;
-    else if (sec === 'Administration Costs') adminTotal = t;
-    else ngoTotal = t;
-    npTotal += t;
   });
 
-  var overallTotal = progTotal + npTotal;
-  var licHflTotal = progLic + npTotal; // Non-prog is all LIC-funded
-  var costShareTotal = licHflTotal + progGovt + progBenf;
+  // Row 13: Programmatic Costs
+  var q1ProgNpCost = progQtrCosts[0] + npQtrCosts[0];
+  var row13 = Array(13).fill(sc(''));
+  row13[1] = sc('i');
+  row13[2] = sc('Programmatic Costs', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 12, c: 2 }, e: { r: 12, c: 4 } }); // C13:E13
+  row13[5] = sc(progTotal, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row13[6] = sc(grandTotal > 0 ? ((progTotal / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  row13[9] = sc('First Quarter');
+  row13[10] = sc(q1ProgNpCost, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row13[11] = sc(grandTotal > 0 ? ((q1ProgNpCost / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row13);
+  rowIdx++;
 
-  var titleFont = { name: 'Arial', sz: 16, bold: true };
-  var sectionFont = { name: 'Arial', sz: 12, bold: true, color: { rgb: 'FFFFFF' } };
-  var hdrFont = { name: 'Arial', sz: 11, bold: true };
-  var dataFont = { name: 'Arial', sz: 11 };
-  var boldFont = { name: 'Arial', sz: 11, bold: true };
+  // Row 14: Human Resource Costs
+  var q2ProgNpCost = progQtrCosts[1] + npQtrCosts[1];
+  var row14 = Array(13).fill(sc(''));
+  row14[1] = sc('ii');
+  row14[2] = sc('Human Resource Costs', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 13, c: 2 }, e: { r: 13, c: 4 } }); // C14:E14
+  row14[5] = sc(hrTotal, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row14[6] = sc(grandTotal > 0 ? ((hrTotal / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  row14[9] = sc('Second Quarter');
+  row14[10] = sc(q2ProgNpCost, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row14[11] = sc(grandTotal > 0 ? ((q2ProgNpCost / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row14);
+  rowIdx++;
 
-  // Row 0-1: Title
-  var r0 = []; for (var i = 0; i < 13; i++) r0.push(sc('', { border: false }));
-  r0[6] = sc('Proposed Budget Statement - Summary Sheet', { font: titleFont, alignment: { horizontal: 'center', vertical: 'center' }, border: false });
-  aoa.push(r0);
-  aoa.push([]);
-  merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 5 } });
-  merges.push({ s: { r: 0, c: 6 }, e: { r: 1, c: 12 } });
+  // Row 15: TOTAL DIRECT COST (A)
+  var totalDirect = progTotal + hrTotal;
+  var q3ProgNpCost = progQtrCosts[2] + npQtrCosts[2];
+  var row15 = Array(13).fill(sc(''));
+  row15[2] = sc('TOTAL DIRECT COST (A)', { font: { bold: true }, alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 14, c: 2 }, e: { r: 14, c: 4 } }); // C15:E15
+  row15[5] = sc(totalDirect, { numFmt: INR_FMT, font: { bold: true }, alignment: { horizontal: 'right' } });
+  row15[6] = sc(grandTotal > 0 ? ((totalDirect / grandTotal) * 100).toFixed(2) + '%' : '0%', { font: { bold: true }, alignment: { horizontal: 'center' } });
+  row15[9] = sc('Third Quarter');
+  row15[10] = sc(q3ProgNpCost, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row15[11] = sc(grandTotal > 0 ? ((q3ProgNpCost / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row15);
+  rowIdx++;
 
-  // Row 2: empty
-  aoa.push([]);
+  // Row 16: "B" + "INDIRECT COSTS" header
+  var row16 = Array(13).fill(sc(''));
+  row16[1] = sc('B');
+  row16[2] = sc('INDIRECT COSTS', { font: { bold: true }, fill: C_GREY_HDR });
+  merges.push({ s: { r: 15, c: 2 }, e: { r: 15, c: 4 } }); // C16:E16
+  row16[5] = sc('Amount', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row16[6] = sc('%ge', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row16[9] = sc('Fourth Quarter');
+  var q4ProgNpCost = progQtrCosts[3] + npQtrCosts[3];
+  row16[10] = sc(q4ProgNpCost, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row16[11] = sc(grandTotal > 0 ? ((q4ProgNpCost / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row16);
+  rowIdx++;
 
-  // Row 3: "Project Details" | "Cost Per Beneficiary"
-  var r3 = [];
-  for (var i = 0; i < 13; i++) r3.push(sc('', {}));
-  r3[1] = sc('Project Details', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
-  r3[9] = sc('Cost Per Beneficiary', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r3);
-  merges.push({ s: { r: 3, c: 1 }, e: { r: 3, c: 7 } });
-  merges.push({ s: { r: 3, c: 9 }, e: { r: 3, c: 11 } });
+  // Row 17: Admin Costs + Total (merged J17:J18, K17:K18, L17:L18)
+  var row17 = Array(13).fill(sc(''));
+  row17[1] = sc('i');
+  row17[2] = sc('Admin Costs', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 16, c: 2 }, e: { r: 16, c: 4 } }); // C17:E17
+  row17[5] = sc(adminTotal, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row17[6] = sc(grandTotal > 0 ? ((adminTotal / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  row17[9] = sc('Total', { font: { bold: true } });
+  row17[10] = sc(grandTotal, { numFmt: INR_FMT, font: { bold: true }, alignment: { horizontal: 'right' } });
+  row17[11] = sc('100%', { font: { bold: true }, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 16, c: 9 }, e: { r: 17, c: 9 } }); // J17:J18
+  merges.push({ s: { r: 16, c: 10 }, e: { r: 17, c: 10 } }); // K17:K18
+  merges.push({ s: { r: 16, c: 11 }, e: { r: 17, c: 11 } }); // L17:L18
+  aoa.push(row17);
+  rowIdx++;
 
-  // Row 4: Project Name | Total Project Costs
-  var projName = frm.doc.project_name || frm.doc.name || '';
-  var r4 = [];
-  for (var i = 0; i < 13; i++) r4.push(sc('', {}));
-  r4[1] = sc('I', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r4[2] = sc('Name of the Project', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r4[5] = sc(projName, { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center', wrapText: true } });
-  r4[9] = sc('Total Project Costs', { font: dataFont, fill: C_LIGHT_GREY });
-  r4[10] = sc(licHflTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r4);
-  merges.push({ s: { r: 4, c: 2 }, e: { r: 4, c: 4 } });
-  merges.push({ s: { r: 4, c: 5 }, e: { r: 4, c: 7 } });
-  merges.push({ s: { r: 4, c: 10 }, e: { r: 4, c: 11 } });
+  // Row 18: NGO Management Costs
+  var row18 = Array(13).fill(sc(''));
+  row18[1] = sc('ii');
+  row18[2] = sc('NGO Management Costs', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 17, c: 2 }, e: { r: 17, c: 4 } }); // C18:E18
+  row18[5] = sc(ngoTotal, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row18[6] = sc(grandTotal > 0 ? ((ngoTotal / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row18);
+  rowIdx++;
 
-  // Row 5: Duration placeholder
-  var r5 = [];
-  for (var i = 0; i < 13; i++) r5.push(sc('', {}));
-  r5[1] = sc('II', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r5[2] = sc('Project Duration', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r5[5] = sc(frm.doc.start_date || '', { font: dataFont });
-  r5[6] = sc('TO', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r5[7] = sc(frm.doc.end_date || '', { font: dataFont });
-  r5[9] = sc('Total Beneficiaries', { font: dataFont, fill: C_LIGHT_GREY });
-  r5[10] = sc(frm.doc.total_beneficiaries || 0, { font: dataFont, fill: C_WHITE });
-  aoa.push(r5);
-  merges.push({ s: { r: 5, c: 2 }, e: { r: 5, c: 4 } });
+  // Row 19: TOTAL INDIRECT COSTS (B)
+  var totalIndirect = adminTotal + ngoTotal;
+  var row19 = Array(13).fill(sc(''));
+  row19[2] = sc('TOTAL INDIRECT COSTS (B)', { font: { bold: true }, alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 18, c: 2 }, e: { r: 18, c: 4 } }); // C19:E19
+  row19[5] = sc(totalIndirect, { numFmt: INR_FMT, font: { bold: true }, alignment: { horizontal: 'right' } });
+  row19[6] = sc(grandTotal > 0 ? ((totalIndirect / grandTotal) * 100).toFixed(2) + '%' : '0%', { font: { bold: true }, alignment: { horizontal: 'center' } });
+  aoa.push(row19);
+  rowIdx++;
 
-  // Row 6: States
-  var r6 = [];
-  for (var i = 0; i < 13; i++) r6.push(sc('', {}));
-  r6[1] = sc('III', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r6[2] = sc('Project Intervention States', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r6[5] = sc(frm.doc.state || '', { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center' } });
-  r6[9] = sc('Cost per Beneficiary', { font: dataFont, fill: C_LIGHT_GREY });
-  var benCount = frm.doc.total_beneficiaries || 0;
-  r6[10] = sc(benCount ? licHflTotal / benCount : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r6);
-  merges.push({ s: { r: 6, c: 2 }, e: { r: 6, c: 4 } });
-  merges.push({ s: { r: 6, c: 5 }, e: { r: 6, c: 7 } });
-  merges.push({ s: { r: 6, c: 10 }, e: { r: 6, c: 11 } });
+  // Row 20: GRANT TOTAL (A+B)
+  var row20 = Array(13).fill(sc(''));
+  row20[2] = sc('GRANT TOTAL (A+B)', { font: { bold: true }, alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 19, c: 2 }, e: { r: 19, c: 4 } }); // C20:E20
+  row20[5] = sc(grandTotal, { numFmt: INR_FMT, font: { bold: true }, fill: C_YELLOW, alignment: { horizontal: 'right' } });
+  row20[6] = sc('100%', { font: { bold: true }, fill: C_YELLOW, alignment: { horizontal: 'center' } });
+  aoa.push(row20);
+  rowIdx++;
 
-  // Row 7: Sites
-  var r7 = [];
-  for (var i = 0; i < 13; i++) r7.push(sc('', {}));
-  r7[1] = sc('IV', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r7[2] = sc('No. of Intervention Site', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r7[5] = sc('', { font: dataFont });
-  aoa.push(r7);
-  merges.push({ s: { r: 7, c: 2 }, e: { r: 7, c: 4 } });
-  merges.push({ s: { r: 7, c: 5 }, e: { r: 7, c: 7 } });
+  // Row 21: blank
+  aoa.push(Array(13).fill(sc('')));
+  rowIdx++;
 
-  // Row 8: Partner
-  var r8 = [];
-  for (var i = 0; i < 13; i++) r8.push(sc('', {}));
-  r8[1] = sc('V', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r8[2] = sc('Implementing Partner', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r8[5] = sc(frm.doc.ngo || '', { font: dataFont, fill: C_WHITE, alignment: { horizontal: 'left', vertical: 'center' } });
-  aoa.push(r8);
-  merges.push({ s: { r: 8, c: 2 }, e: { r: 8, c: 4 } });
-  merges.push({ s: { r: 8, c: 5 }, e: { r: 8, c: 7 } });
+  // Row 22: "Cost Sharing Details" header (B22, merged B22:G22)
+  var row22 = Array(13).fill(sc(''));
+  row22[1] = sc('Cost Sharing Details', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  merges.push({ s: { r: 21, c: 1 }, e: { r: 21, c: 6 } }); // B22:G22
+  aoa.push(row22);
+  rowIdx++;
 
-  // Row 9: empty
-  aoa.push([]);
+  // Row 23: Column headers for cost sharing
+  var row23 = Array(13).fill(sc(''));
+  row23[1] = sc('Cost Sharing', { font: { bold: true }, fill: C_GREY_HDR });
+  merges.push({ s: { r: 22, c: 1 }, e: { r: 22, c: 4 } }); // B23:E23
+  row23[5] = sc('Amount', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  row23[6] = sc('%ge', { font: { bold: true }, fill: C_GREY_HDR, alignment: { horizontal: 'center' } });
+  aoa.push(row23);
+  rowIdx++;
 
-  // Row 10: "Budget Breakup" header
-  var r10 = [];
-  for (var i = 0; i < 13; i++) r10.push(sc('', {}));
-  r10[1] = sc('Budget Breakup', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r10);
-  merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 6 } });
+  // Row 24: Government Convergence
+  var govtContrib = (progData.rows || []).reduce(function(s, r) { return s + (r.govt || 0); }, 0);
+  var row24 = Array(13).fill(sc(''));
+  row24[1] = sc('Government Convergence', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 23, c: 1 }, e: { r: 23, c: 4 } }); // B24:E24
+  row24[5] = sc(govtContrib, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row24[6] = sc(grandTotal > 0 ? ((govtContrib / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row24);
+  rowIdx++;
 
-  // Row 11: A - DIRECT COSTS header + "Quarterly Breakup of Costs"
-  var r11 = [];
-  for (var i = 0; i < 13; i++) r11.push(sc('', {}));
-  r11[1] = sc('A', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r11[2] = sc('DIRECT COSTS', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r11[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r11[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r11[9] = sc('Quarterly Breakup of Costs', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r11);
-  merges.push({ s: { r: 11, c: 2 }, e: { r: 11, c: 4 } });
-  merges.push({ s: { r: 11, c: 9 }, e: { r: 11, c: 11 } });
+  // Row 25: Community/Beneficiary
+  var benfContrib = (progData.rows || []).reduce(function(s, r) { return s + (r.benf || 0); }, 0);
+  var row25 = Array(13).fill(sc(''));
+  row25[1] = sc('Community/Beneficiary/NGO/Other', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 24, c: 1 }, e: { r: 24, c: 4 } }); // B25:E25
+  row25[5] = sc(benfContrib, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row25[6] = sc(grandTotal > 0 ? ((benfContrib / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row25);
+  rowIdx++;
 
-  // Row 12: Programmatic + Q1
-  var directTotal = progTotal + hrTotal;
-  var r12 = [];
-  for (var i = 0; i < 13; i++) r12.push(sc('', {}));
-  r12[1] = sc('i', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r12[2] = sc('Programmatic Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r12[5] = sc(progTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r12[6] = sc(overallTotal ? progTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  r12[9] = sc('First Quarter', { font: dataFont });
-  var q1Total = (progQtrCosts[0] || 0) + (npQtrCosts[0] || 0);
-  r12[10] = sc(q1Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
-  r12[11] = sc(overallTotal ? q1Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
-  aoa.push(r12);
-  merges.push({ s: { r: 12, c: 2 }, e: { r: 12, c: 4 } });
+  // Row 26: LIC HFL Contribution
+  var licHflContrib = grandTotal - govtContrib - benfContrib;
+  var row26 = Array(13).fill(sc(''));
+  row26[1] = sc('LIC HFL Contribution', { alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 25, c: 1 }, e: { r: 25, c: 4 } }); // B26:E26
+  row26[5] = sc(licHflContrib, { numFmt: INR_FMT, alignment: { horizontal: 'right' } });
+  row26[6] = sc(grandTotal > 0 ? ((licHflContrib / grandTotal) * 100).toFixed(2) + '%' : '0%', { alignment: { horizontal: 'center' } });
+  aoa.push(row26);
+  rowIdx++;
 
-  // Row 13: HR Costs + Q2
-  var r13 = [];
-  for (var i = 0; i < 13; i++) r13.push(sc('', {}));
-  r13[1] = sc('ii', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r13[2] = sc('Human Resource Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r13[5] = sc(hrTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r13[6] = sc(overallTotal ? hrTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  r13[9] = sc('Second Quarter', { font: dataFont });
-  var q2Total = (progQtrCosts[1] || 0) + (npQtrCosts[1] || 0);
-  r13[10] = sc(q2Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
-  r13[11] = sc(overallTotal ? q2Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
-  aoa.push(r13);
-  merges.push({ s: { r: 13, c: 2 }, e: { r: 13, c: 4 } });
+  // Row 27: TOTAL
+  var row27 = Array(13).fill(sc(''));
+  row27[1] = sc('TOTAL', { font: { bold: true }, alignment: { horizontal: 'left' } });
+  merges.push({ s: { r: 26, c: 1 }, e: { r: 26, c: 4 } }); // B27:E27
+  row27[5] = sc(grandTotal, { numFmt: INR_FMT, font: { bold: true }, fill: C_YELLOW, alignment: { horizontal: 'right' } });
+  row27[6] = sc('100%', { font: { bold: true }, fill: C_YELLOW, alignment: { horizontal: 'center' } });
+  aoa.push(row27);
 
-  // Row 14: Total Direct (A)
-  var r14 = [];
-  for (var i = 0; i < 13; i++) r14.push(sc('', {}));
-  r14[2] = sc('TOTAL DIRECT COST (A)', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r14[5] = sc(directTotal, { font: boldFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r14[6] = sc(overallTotal ? directTotal / overallTotal : 0, { font: boldFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  r14[9] = sc('Third Quarter', { font: dataFont });
-  var q3Total = (progQtrCosts[2] || 0) + (npQtrCosts[2] || 0);
-  r14[10] = sc(q3Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
-  r14[11] = sc(overallTotal ? q3Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
-  aoa.push(r14);
-  merges.push({ s: { r: 14, c: 2 }, e: { r: 14, c: 4 } });
-
-  // Row 15: B - INDIRECT COSTS
-  var r15 = [];
-  for (var i = 0; i < 13; i++) r15.push(sc('', {}));
-  r15[1] = sc('B', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r15[2] = sc('INDIRECT COSTS', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r15[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r15[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r15[9] = sc('Fourth Quarter', { font: dataFont });
-  var q4Total = (progQtrCosts[3] || 0) + (npQtrCosts[3] || 0);
-  r15[10] = sc(q4Total, { font: dataFont, numFmt: INR_FMT, alignment: { horizontal: 'right' } });
-  r15[11] = sc(overallTotal ? q4Total / overallTotal : 0, { font: dataFont, numFmt: PCT_FMT, alignment: { horizontal: 'right' } });
-  aoa.push(r15);
-  merges.push({ s: { r: 15, c: 2 }, e: { r: 15, c: 4 } });
-
-  // Row 16: Admin + Total row
-  var indirectTotal = adminTotal + ngoTotal;
-  var r16 = [];
-  for (var i = 0; i < 13; i++) r16.push(sc('', {}));
-  r16[1] = sc('i', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r16[2] = sc('Admin Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r16[5] = sc(adminTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r16[6] = sc(overallTotal ? adminTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  r16[9] = sc('Total', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } });
-  r16[10] = sc(overallTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT, alignment: { horizontal: 'right', vertical: 'center', wrapText: true } });
-  r16[11] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT, alignment: { horizontal: 'right', vertical: 'center' } });
-  aoa.push(r16);
-  merges.push({ s: { r: 16, c: 2 }, e: { r: 16, c: 4 } });
-
-  // Row 17: NGO Management
-  var r17 = [];
-  for (var i = 0; i < 13; i++) r17.push(sc('', {}));
-  r17[1] = sc('ii', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'center', vertical: 'center' } });
-  r17[2] = sc('NGO Management Costs', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r17[5] = sc(ngoTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r17[6] = sc(overallTotal ? ngoTotal / overallTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  aoa.push(r17);
-  merges.push({ s: { r: 17, c: 2 }, e: { r: 17, c: 4 } });
-
-  // Row 18: Total Indirect (B)
-  var r18 = [];
-  for (var i = 0; i < 13; i++) r18.push(sc('', {}));
-  r18[2] = sc('TOTAL INDIRECT COSTS (B)', { font: boldFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r18[5] = sc(indirectTotal, { font: boldFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r18[6] = sc(overallTotal ? indirectTotal / overallTotal : 0, { font: boldFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  aoa.push(r18);
-  merges.push({ s: { r: 18, c: 2 }, e: { r: 18, c: 4 } });
-
-  // Row 19: GRAND TOTAL (A+B)
-  var r19 = [];
-  for (var i = 0; i < 13; i++) r19.push(sc('', {}));
-  r19[2] = sc('GRANT TOTAL (A+B)', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'center', vertical: 'center' } });
-  r19[5] = sc(overallTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT });
-  r19[6] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT });
-  aoa.push(r19);
-  merges.push({ s: { r: 19, c: 2 }, e: { r: 19, c: 4 } });
-
-  // Row 20: empty
-  aoa.push([]);
-
-  // Row 21: Cost Sharing Details header
-  var r21 = [];
-  for (var i = 0; i < 13; i++) r21.push(sc('', {}));
-  r21[1] = sc('Cost Sharing Details', { font: sectionFont, fill: C_DARK, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r21);
-  merges.push({ s: { r: 21, c: 1 }, e: { r: 21, c: 6 } });
-
-  // Row 22: Header
-  var r22 = [];
-  for (var i = 0; i < 13; i++) r22.push(sc('', {}));
-  r22[1] = sc('Cost Sharing', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r22[5] = sc('Amount', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  r22[6] = sc('%ge', { font: hdrFont, fill: C_GREY_HDR, alignment: { horizontal: 'center', vertical: 'center' } });
-  aoa.push(r22);
-
-  // Row 23: Government
-  var r23 = [];
-  for (var i = 0; i < 13; i++) r23.push(sc('', {}));
-  r23[1] = sc('Government Convergence', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r23[5] = sc(progGovt, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r23[6] = sc(costShareTotal ? progGovt / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  aoa.push(r23);
-  merges.push({ s: { r: 23, c: 1 }, e: { r: 23, c: 4 } });
-
-  // Row 24: Beneficiary
-  var r24 = [];
-  for (var i = 0; i < 13; i++) r24.push(sc('', {}));
-  r24[1] = sc('Community/Beneficiary/NGO/Other', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r24[5] = sc(progBenf, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r24[6] = sc(costShareTotal ? progBenf / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  aoa.push(r24);
-  merges.push({ s: { r: 24, c: 1 }, e: { r: 24, c: 4 } });
-
-  // Row 25: LIC HFL
-  var r25 = [];
-  for (var i = 0; i < 13; i++) r25.push(sc('', {}));
-  r25[1] = sc('LIC HFL Contribution', { font: dataFont, fill: C_LIGHT_GREY, alignment: { horizontal: 'left', vertical: 'center' } });
-  r25[5] = sc(licHflTotal, { font: dataFont, fill: C_LIGHT_GREY, numFmt: INR_FMT });
-  r25[6] = sc(costShareTotal ? licHflTotal / costShareTotal : 0, { font: dataFont, fill: C_LIGHT_GREY, numFmt: PCT_FMT });
-  aoa.push(r25);
-  merges.push({ s: { r: 25, c: 1 }, e: { r: 25, c: 4 } });
-
-  // Row 26: TOTAL
-  var r26 = [];
-  for (var i = 0; i < 13; i++) r26.push(sc('', {}));
-  r26[1] = sc('TOTAL', { font: boldFont, fill: C_YELLOW, alignment: { horizontal: 'left', vertical: 'center' } });
-  r26[5] = sc(costShareTotal, { font: boldFont, fill: C_YELLOW, numFmt: INR_FMT });
-  r26[6] = sc(1, { font: boldFont, fill: C_YELLOW, numFmt: PCT_FMT });
-  aoa.push(r26);
-  merges.push({ s: { r: 26, c: 1 }, e: { r: 26, c: 4 } });
-
-  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
-  ws['!cols'] = [
-    { wch: 3 }, { wch: 7 }, { wch: 10 }, { wch: 13 }, { wch: 13 },
-    { wch: 16 }, { wch: 13 }, { wch: 16 }, { wch: 8 },
-    { wch: 26 }, { wch: 18 }, { wch: 14 }, { wch: 3 }
-  ];
 
-  ws['!protect'] = { password: '', sheet: true, objects: true, scenarios: true, selectLockedCells: false, selectUnlockedCells: false };
-  return ws;
-}
-
-// ============================================================================
-// STYLES
-// ============================================================================
-
-function ab_getStyles() {
-  return '\
-.ab-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; color: #333; padding: 8px; }\
-.ab-tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 2px solid #e0e0e0; }\
-.ab-tab-btn { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; }\
-.ab-tab-btn:hover { color: #333; }\
-.ab-tab-btn.ab-tab-active { color: #1a5490; border-bottom-color: #1a5490; font-weight: 600; }\
-.ab-tab-content { display: block; }\
-.ab-tab-content.ab-hidden { display: none; }\
-.ab-scroll-wrapper { overflow-x: auto; overflow-y: auto; max-height: 70vh; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }\
-.ab-table { border-collapse: separate; border-spacing: 0; background: #fff; }\
-.ab-prog-table { min-width: 100%; }\
-.ab-nonprog-table { min-width: 100%; }\
-.ab-table th, .ab-table td { border: 1px solid #ddd; padding: 3px 4px; font-size: 11px; white-space: nowrap; }\
-.ab-table th { text-align: center; font-weight: 500; position: sticky; top: 0; z-index: 8; }\
-.ab-table td { text-align: right; }\
-.ab-table thead tr:nth-child(1) th { top: 0; z-index: 9; }\
-.ab-table thead tr:nth-child(2) th { top: 25px; z-index: 9; }\
-.ab-table thead tr:nth-child(3) th { top: 50px; z-index: 9; }\
-.ab-frozen { position: sticky; z-index: 10; background: #f8f9fa; }\
-.ab-frozen-header { position: sticky; z-index: 15 !important; }\
-.ab-hdr-r1 { background: #f0f4ff !important; }\
-.ab-hdr-r2 { background: #f8f9fa !important; }\
-.ab-table thead .ab-frozen { z-index: 15 !important; }\
-.ab-sr { text-align: center; font-weight: 500; width: 30px; min-width: 30px; }\
-.ab-desc-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }\
-.ab-header-row-1 th { background: #f0f4ff; font-weight: 600; padding: 5px 3px; }\
-.ab-year-header { color: #1a5490; }\
-.ab-year-header.ab-year-0 { background: #eef5ff; }\
-.ab-year-header.ab-year-1 { background: #e8f5e9; color: #1b5e20; }\
-.ab-grand-total-header { background: #fff9e6; color: #f57f17; }\
-.ab-header-row-2 th, .ab-header-row-3 th { background: #f8f9fa; font-weight: 500; padding: 3px 3px; }\
-.ab-quarter-header.ab-year-0 { background: #eef5ff; border-color: #c5d9f1; }\
-.ab-quarter-header.ab-year-1 { background: #e8f5e9; border-color: #c8e6c9; }\
-.ab-year-total-header.ab-year-0 { background: #dce8f8; font-weight: 600; }\
-.ab-year-total-header.ab-year-1 { background: #d5ecd8; font-weight: 600; }\
-.ab-subcol { background: #fafafa; font-size: 10px; }\
-.ab-yt-subcol { background: #eef5ff; font-weight: 600; font-size: 10px; }\
-.ab-yt-subcol.ab-year-1 { background: #e8f5e9; }\
-.ab-gt-subcol { background: #fff3cd; font-weight: 700; font-size: 10px; }\
-.ab-calc { background: #f4f7fa; font-family: "Monaco","Menlo",monospace; font-size: 11px; }\
-.ab-total-col { background: #edf2f7; font-weight: 500; }\
-.ab-yt-cell { background: #f0f5ff; font-weight: 500; font-family: "Monaco","Menlo",monospace; font-size: 11px; }\
-.ab-gt-cell { background: #fffbf0; font-weight: 600; font-family: "Monaco","Menlo",monospace; font-size: 11px; border-color: #ffe0b2; }\
-.ab-gt-final { background: #fff3cd; font-weight: 700; }\
-.ab-grand-total-row { border-top: 2px solid #ffc107; }\
-.ab-grand-total-row td { background: #fffbf0; font-weight: 700; }\
-.ab-section-total-row td { background: #f5f5f5; font-weight: 600; border-top: 2px solid #ddd; }\
-.ab-editable { background: #fffef5; }\
-.ab-inp { width: 50px; padding: 2px 3px; border: 1px solid #ddd; background: #fffef5; border-radius: 2px; font-size: 11px; text-align: right; font-family: inherit; }\
-.ab-inp:focus { outline: none; border-color: #4285f4; background: #fff; box-shadow: 0 0 3px rgba(66,133,244,0.3); }\
-.ab-section { border: 1px solid #ddd; margin-bottom: 8px; border-radius: 4px; overflow: hidden; }\
-.ab-section-header { background: #f5f5f5; padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 12px; user-select: none; display: flex; justify-content: space-between; align-items: center; }\
-.ab-section-header:hover { background: #eee; }\
-.ab-toggle { font-size: 10px; color: #999; }\
-.ab-section-content { display: block; }\
-.ab-data-row:hover td { background: #f0f7ff; }\
-.ab-footer { margin-top: 10px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; font-size: 11px; display: flex; gap: 16px; align-items: center; }\
-.ab-legend { display: flex; align-items: center; gap: 4px; }\
-.ab-saved-indicator { margin-left: auto; color: #4caf50; font-weight: 500; display: none; }\
-.ab-nonprog-wrapper { }\
-.ab-add-row-btn { background: #fff; border: 1px dashed #aaa; color: #666; transition: all 0.2s; font-size: 11px; padding: 3px 10px; }\
-.ab-add-row-btn:hover { background: #f0f7ff; border-color: #4285f4; color: #4285f4; }\
-.ab-desc-inp { width: 170px; padding: 2px 3px; border: 1px solid #ddd; background: #fffef5; border-radius: 2px; font-size: 11px; text-align: left; font-family: inherit; }\
-.ab-desc-inp:focus { outline: none; border-color: #4285f4; background: #fff; box-shadow: 0 0 3px rgba(66,133,244,0.3); }\
-.ab-uom-sel { width: 70px; padding: 2px 1px; border: 1px solid #ddd; background: #fffef5; border-radius: 2px; font-size: 10px; font-family: inherit; cursor: pointer; }\
-.ab-uom-sel:focus { outline: none; border-color: #4285f4; background: #fff; box-shadow: 0 0 3px rgba(66,133,244,0.3); }\
-';
+  return { ws: ws };
 }
