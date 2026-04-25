@@ -446,7 +446,7 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   // Row 1: Frozen headers (empty for cols 0-4) + Convergence spanning cols 5-9 + Quarter spans + Remarks
   html += '<tr class="ab-header-row-1">';
-  html += '<th colspan="5" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;min-width:435px;">Activity Details</th>';
+  html += '<th colspan="5" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Activity Details</th>';
   html += '<th colspan="5" class="ab-convergence-header">Convergence</th>';
   quarters.forEach(function(q, qi) {
     html += '<th colspan="4" class="ab-quarter-header">' + q.quarter + '</th>';
@@ -582,7 +582,7 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
 
     // Row 1: Headers with frozen columns (4) merged + quarterly + Combined + Remarks — all maroon
     html += '<tr class="ab-header-row-1">' +
-      '<th colspan="4" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;min-width:325px;">Particulars</th>' +
+      '<th colspan="4" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;">Particulars</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>';
     quarters.forEach(function(q, qi) {
