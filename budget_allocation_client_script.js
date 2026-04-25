@@ -446,9 +446,7 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   // Row 1: Frozen headers (empty for cols 0-4) + Convergence spanning cols 5-9 + Quarter spans + Remarks
   html += '<tr class="ab-header-row-1">';
-  for (var i = 0; i < 5; i++) {
-    html += '<th class="ab-frozen-header ab-hdr-r1" style="background:#8B1A1A !important;">&nbsp;</th>';
-  }
+  html += '<th colspan="5" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;min-width:435px;">Activity Details</th>';
   html += '<th colspan="5" class="ab-convergence-header">Convergence</th>';
   quarters.forEach(function(q, qi) {
     html += '<th colspan="4" class="ab-quarter-header">' + q.quarter + '</th>';
@@ -582,12 +580,9 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       '<div class="ab-section-content"><div class="ab-scroll-wrapper">' +
       '<table class="ab-table ab-nonprog-table"><thead>';
 
-    // Row 1: Headers with frozen columns (4) + quarterly + Combined + Remarks — all maroon
+    // Row 1: Headers with frozen columns (4) merged + quarterly + Combined + Remarks — all maroon
     html += '<tr class="ab-header-row-1">' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:30px;min-width:30px;background:#8B1A1A !important;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:30px;width:160px;min-width:160px;background:#8B1A1A !important;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:190px;width:60px;min-width:60px;background:#8B1A1A !important;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:250px;width:75px;min-width:75px;background:#8B1A1A !important;">&nbsp;</th>' +
+      '<th colspan="4" class="ab-frozen-header" style="position:sticky;left:0;top:0;z-index:20;background:#8B1A1A;color:white;font-weight:700;min-width:325px;">Particulars</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>' +
       '<th class="ab-quarter-header">&nbsp;</th>';
     quarters.forEach(function(q, qi) {
