@@ -444,12 +444,12 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   html += '<thead>';
 
-  // Row 1: Frozen headers (empty for cols 0-6) + Convergence spanning cols 7-9 + Quarter spans + Remarks
+  // Row 1: Frozen headers (empty for cols 0-4) + Convergence spanning cols 5-9 + Quarter spans + Remarks
   html += '<tr class="ab-header-row-1">';
-  for (var i = 0; i < 7; i++) {
+  for (var i = 0; i < 5; i++) {
     html += '<th class="ab-frozen-header ab-hdr-r1">&nbsp;</th>';
   }
-  html += '<th colspan="3" class="ab-frozen-header ab-convergence-header">Convergence</th>';
+  html += '<th colspan="5" class="ab-convergence-header">Convergence</th>';
   quarters.forEach(function(q, qi) {
     var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
     html += '<th colspan="4" class="ab-quarter-header ' + qClass + '">' + q.quarter + '</th>';
@@ -458,16 +458,16 @@ function ab_buildProgTab(frm, quarters, years, data) {
 
   // Row 2: Column headers
   html += '<tr class="ab-header-row-2">';
-  html += '<th class="ab-frozen ab-sr-hdr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">Sr.</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:40px;width:180px;min-width:180px;">Activity</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:220px;width:160px;min-width:160px;">Task Details</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:380px;width:70px;min-width:70px;">UoM</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:450px;width:90px;min-width:90px;">Unit Cost</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:540px;width:70px;min-width:70px;">Total Units</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:610px;width:100px;min-width:100px;">Total Cost</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:710px;width:120px;min-width:120px;">LIC HFL Contribution</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:830px;width:100px;min-width:100px;">Govt Contrib (₹)</th>';
-  html += '<th class="ab-frozen ab-col-hdr" style="left:930px;width:100px;min-width:100px;">Benf Contrib (₹)</th>';
+  html += '<th class="ab-frozen ab-sr-hdr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">Sr.</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:35px;width:150px;min-width:150px;">Activity</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:185px;width:120px;min-width:120px;">Task Details</th>';
+  html += '<th class="ab-frozen ab-col-hdr" style="left:305px;width:55px;min-width:55px;">UoM</th>';
+  html += '<th class="ab-frozen ab-col-hdr ab-frozen-last" style="left:360px;width:75px;min-width:75px;">Unit Cost</th>';
+  html += '<th class="ab-col-hdr" style="width:70px;min-width:70px;">Total Units</th>';
+  html += '<th class="ab-col-hdr" style="width:85px;min-width:85px;">Total Cost</th>';
+  html += '<th class="ab-col-hdr" style="width:100px;min-width:100px;">LIC HFL Contribution</th>';
+  html += '<th class="ab-col-hdr" style="width:85px;min-width:85px;">Govt Contrib (₹)</th>';
+  html += '<th class="ab-col-hdr" style="width:85px;min-width:85px;">Benf Contrib (₹)</th>';
 
   // Quarterly column headers (per quarter)
   quarters.forEach(function(q, qi) {
@@ -496,24 +496,26 @@ function ab_buildProgTab(frm, quarters, years, data) {
 function ab_buildProgRow(row, quarters, idx) {
   var html = '<tr class="ab-data-row" data-idx="' + idx + '">';
 
-  // Frozen columns (0-9)
-  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">' + (idx + 1) + '</td>';
-  html += '<td class="ab-frozen ab-desc-cell" style="left:40px;width:180px;min-width:180px;text-align:left;" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</td>';
-  html += '<td class="ab-frozen ab-editable" style="left:220px;width:160px;min-width:160px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
-  html += '<td class="ab-frozen" style="left:380px;width:70px;min-width:70px;">' + ab_he(row.uomName || 'Numbers') + '</td>';
-  html += '<td class="ab-frozen ab-editable" style="left:450px;width:90px;min-width:90px;"><input type="number" class="ab-inp ab-uc-inp" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
-  html += '<td class="ab-frozen ab-editable" style="left:540px;width:70px;min-width:70px;"><input type="number" class="ab-inp ab-tu-inp" data-idx="' + idx + '" value="' + (row.total_units || 0) + '" /></td>';
+  // Frozen columns (0-4): Sr, Activity, Task Details, UoM, Unit Cost
+  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">' + (idx + 1) + '</td>';
+  html += '<td class="ab-frozen ab-desc-cell" style="left:35px;width:150px;min-width:150px;text-align:left;" title="' + ab_he(row.description) + '">' + ab_he(row.description) + '</td>';
+  html += '<td class="ab-frozen ab-editable" style="left:185px;width:120px;min-width:120px;text-align:left;"><input type="text" class="ab-inp ab-task-inp" data-idx="' + idx + '" value="' + ab_he(row.assumption || '') + '" placeholder="Task details..." /></td>';
+  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;">' + ab_he(row.uomName || 'Numbers') + '</td>';
+  html += '<td class="ab-frozen ab-editable ab-frozen-last" style="left:360px;width:75px;min-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-idx="' + idx + '" value="' + (row.unit_cost || 0) + '" /></td>';
+
+  // Non-frozen columns (5-9): Total Units, Total Cost, LIC HFL, Govt, Benf
+  html += '<td class="ab-editable" style="width:70px;min-width:70px;"><input type="number" class="ab-inp ab-tu-inp" data-idx="' + idx + '" value="' + (row.total_units || 0) + '" /></td>';
 
   // Auto-calc: Total Cost = Unit Cost × Total Units
   var tc = (row.unit_cost || 0) * (row.total_units || 0);
-  html += '<td class="ab-frozen ab-calc" style="left:610px;width:100px;min-width:100px;">' + ab_fc(tc) + '</td>';
+  html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(tc) + '</td>';
 
   // Auto-calc: Total LIC HFL = Total Cost - Govt - Benf
   var tlhfl = tc - (row.govt_contribution || 0) - (row.benf_contribution || 0);
-  html += '<td class="ab-frozen ab-calc" style="left:710px;width:120px;min-width:120px;">' + ab_fc(tlhfl) + '</td>';
+  html += '<td class="ab-calc" style="width:100px;min-width:100px;">' + ab_fc(tlhfl) + '</td>';
 
-  html += '<td class="ab-frozen ab-editable" style="left:830px;width:100px;min-width:100px;"><input type="number" class="ab-inp ab-govt-inp" data-idx="' + idx + '" value="' + (row.govt_contribution || 0) + '" /></td>';
-  html += '<td class="ab-frozen ab-editable" style="left:930px;width:100px;min-width:100px;"><input type="number" class="ab-inp ab-benf-inp" data-idx="' + idx + '" value="' + (row.benf_contribution || 0) + '" /></td>';
+  html += '<td class="ab-editable" style="width:85px;min-width:85px;"><input type="number" class="ab-inp ab-govt-inp" data-idx="' + idx + '" value="' + (row.govt_contribution || 0) + '" /></td>';
+  html += '<td class="ab-editable" style="width:85px;min-width:85px;"><input type="number" class="ab-inp ab-benf-inp" data-idx="' + idx + '" value="' + (row.benf_contribution || 0) + '" /></td>';
 
   // Per-quarter columns (4 per quarter)
   quarters.forEach(function(q, qi) {
@@ -537,17 +539,19 @@ function ab_buildProgRow(row, quarters, idx) {
 function ab_buildProgGrandTotal(rows, quarters) {
   var html = '<tr class="ab-grand-total-row">';
 
-  // Frozen columns (Grand Total label in Sr + Activity cells)
-  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:40px;min-width:40px;">GT</td>';
-  html += '<td class="ab-frozen" style="left:40px;width:180px;min-width:180px;text-align:left;font-weight:700;">GRAND TOTAL</td>';
-  html += '<td class="ab-frozen" style="left:220px;width:160px;min-width:160px;"></td>';
-  html += '<td class="ab-frozen" style="left:380px;width:70px;min-width:70px;"></td>';
-  html += '<td class="ab-frozen" style="left:450px;width:90px;min-width:90px;"></td>';
-  html += '<td class="ab-frozen" style="left:540px;width:70px;min-width:70px;"></td>';
-  html += '<td class="ab-frozen ab-gt-cell" style="left:610px;width:100px;min-width:100px;">0</td>';
-  html += '<td class="ab-frozen ab-gt-cell" style="left:710px;width:120px;min-width:120px;">0</td>';
-  html += '<td class="ab-frozen ab-gt-cell" style="left:830px;width:100px;min-width:100px;">0</td>';
-  html += '<td class="ab-frozen ab-gt-cell" style="left:930px;width:100px;min-width:100px;">0</td>';
+  // Frozen columns (5): Sr, Activity, Task Details, UoM, Unit Cost
+  html += '<td class="ab-frozen ab-sr ab-frozen-last" style="left:0px;width:35px;min-width:35px;">GT</td>';
+  html += '<td class="ab-frozen" style="left:35px;width:150px;min-width:150px;text-align:left;font-weight:700;">GRAND TOTAL</td>';
+  html += '<td class="ab-frozen" style="left:185px;width:120px;min-width:120px;"></td>';
+  html += '<td class="ab-frozen" style="left:305px;width:55px;min-width:55px;"></td>';
+  html += '<td class="ab-frozen" style="left:360px;width:75px;min-width:75px;"></td>';
+
+  // Non-frozen columns (5): Total Units, Total Cost, LIC HFL, Govt, Benf
+  html += '<td class="ab-gt-cell" style="width:70px;min-width:70px;"></td>';
+  html += '<td class="ab-gt-cell" style="width:85px;min-width:85px;">0</td>';
+  html += '<td class="ab-gt-cell" style="width:100px;min-width:100px;">0</td>';
+  html += '<td class="ab-gt-cell" style="width:85px;min-width:85px;">0</td>';
+  html += '<td class="ab-gt-cell" style="width:85px;min-width:85px;">0</td>';
 
   // Per-quarter totals
   quarters.forEach(function(q, qi) {
@@ -579,14 +583,12 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
       '<div class="ab-section-content"><div class="ab-scroll-wrapper">' +
       '<table class="ab-table ab-nonprog-table"><thead>';
 
-    // Row 1: Headers with frozen columns + Combined Total + Remarks
+    // Row 1: Headers with frozen columns (4) + Combined Total + Remarks
     html += '<tr class="ab-header-row-1">' +
       '<th class="ab-frozen-header ab-hdr-r1" style="left:0;width:30px;min-width:30px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:30px;width:180px;min-width:180px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:210px;width:72px;min-width:72px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:282px;width:80px;min-width:80px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:362px;width:70px;min-width:70px;">&nbsp;</th>' +
-      '<th class="ab-frozen-header ab-hdr-r1" style="left:432px;width:90px;min-width:90px;">&nbsp;</th>';
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:30px;width:160px;min-width:160px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:190px;width:60px;min-width:60px;">&nbsp;</th>' +
+      '<th class="ab-frozen-header ab-hdr-r1" style="left:250px;width:75px;min-width:75px;">&nbsp;</th>';
     quarters.forEach(function(q, qi) {
       var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
       html += '<th colspan="2" class="ab-quarter-header ' + qClass + '">' + q.quarter + '</th>';
@@ -596,11 +598,11 @@ function ab_buildNonProgTab(frm, quarters, years, data, unitsList) {
     // Row 2: Column headers
     html += '<tr class="ab-header-row-2">' +
       '<th class="ab-frozen" style="left:0;width:30px;min-width:30px;">Sr.</th>' +
-      '<th class="ab-frozen" style="left:30px;width:180px;min-width:180px;">Particulars</th>' +
-      '<th class="ab-frozen" style="left:210px;width:72px;min-width:72px;">UoM</th>' +
-      '<th class="ab-frozen" style="left:282px;width:80px;min-width:80px;">Unit Cost</th>' +
-      '<th class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">Total Units</th>' +
-      '<th class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">Total Cost</th>';
+      '<th class="ab-frozen" style="left:30px;width:160px;min-width:160px;">Particulars</th>' +
+      '<th class="ab-frozen" style="left:190px;width:60px;min-width:60px;">UoM</th>' +
+      '<th class="ab-frozen ab-frozen-last" style="left:250px;width:75px;min-width:75px;">Unit Cost</th>' +
+      '<th class="ab-calc" style="width:70px;min-width:70px;">Total Units</th>' +
+      '<th class="ab-calc" style="width:85px;min-width:85px;">Total Cost</th>';
 
     quarters.forEach(function(q, qi) {
       var qClass = qi % 2 === 0 ? 'ab-q-odd' : 'ab-q-even';
@@ -644,21 +646,21 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
   });
 
   var html = '<tr class="ab-data-row" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" data-pbp="' + ab_he(pbpId) + '">' +
-    '<td class="ab-frozen ab-sr" style="left:0;">' + (idx + 1) + '</td>' +
-    '<td class="ab-frozen ab-editable" style="left:30px;text-align:left;"><input type="text" class="ab-inp ab-desc-inp" style="width:170px;text-align:left;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.description) + '" placeholder="Enter particulars..." /></td>' +
-    '<td class="ab-frozen ab-editable" style="left:210px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:75px;text-align:left;">' + uomOptions + '</select></td>' +
-    '<td class="ab-frozen ab-editable" style="left:282px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
+    '<td class="ab-frozen ab-sr" style="left:0;width:30px;min-width:30px;">' + (idx + 1) + '</td>' +
+    '<td class="ab-frozen ab-editable" style="left:30px;width:160px;min-width:160px;text-align:left;"><input type="text" class="ab-inp ab-desc-inp" style="width:150px;text-align:left;" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + ab_he(row.description) + '" placeholder="Enter particulars..." /></td>' +
+    '<td class="ab-frozen ab-editable" style="left:190px;width:60px;min-width:60px;"><select class="ab-inp ab-uom-sel" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" style="width:55px;text-align:left;">' + uomOptions + '</select></td>' +
+    '<td class="ab-frozen ab-editable ab-frozen-last" style="left:250px;width:75px;min-width:75px;"><input type="number" class="ab-inp ab-uc-inp" data-section="' + ab_he(secTitle) + '" data-ridx="' + idx + '" value="' + uc + '" /></td>';
 
-  // Total Units (auto-calc)
+  // Total Units (auto-calc) - non-frozen
   var totalUnits = 0;
   quarters.forEach(function(q, qi) {
     totalUnits += (qData[qi] || {}).units || 0;
   });
-  html += '<td class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">' + totalUnits + '</td>';
+  html += '<td class="ab-calc" style="width:70px;min-width:70px;">' + totalUnits + '</td>';
 
-  // Total Cost (auto-calc)
+  // Total Cost (auto-calc) - non-frozen
   var totalCost = uc * totalUnits;
-  html += '<td class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">' + ab_fc(totalCost) + '</td>';
+  html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(totalCost) + '</td>';
 
   // Per-quarter data
   var combinedCost = 0;
@@ -685,21 +687,21 @@ function ab_buildNonProgRow(row, quarters, idx, secTitle, unitsList) {
 
 function ab_buildNonProgSectionTotal(rows, quarters, secTitle) {
   var html = '<tr class="ab-section-total-row">' +
-    '<td class="ab-frozen" style="left:0;"></td>' +
-    '<td class="ab-frozen" style="left:30px;text-align:left;font-weight:700;">Section Total</td>' +
-    '<td class="ab-frozen" style="left:210px;"></td>' +
-    '<td class="ab-frozen" style="left:282px;"></td>';
+    '<td class="ab-frozen" style="left:0;width:30px;min-width:30px;"></td>' +
+    '<td class="ab-frozen" style="left:30px;width:160px;min-width:160px;text-align:left;font-weight:700;">Section Total</td>' +
+    '<td class="ab-frozen" style="left:190px;width:60px;min-width:60px;"></td>' +
+    '<td class="ab-frozen" style="left:250px;width:75px;min-width:75px;"></td>';
 
-  // Total Units
+  // Total Units - non-frozen
   var totalUnits = 0;
   rows.forEach(function(row) {
     quarters.forEach(function(q, qi) {
       totalUnits += (row.quarters[qi] || {}).units || 0;
     });
   });
-  html += '<td class="ab-frozen ab-calc" style="left:362px;width:70px;min-width:70px;">' + totalUnits + '</td>';
+  html += '<td class="ab-calc" style="width:70px;min-width:70px;">' + totalUnits + '</td>';
 
-  // Total Cost
+  // Total Cost - non-frozen
   var totalCost = 0;
   rows.forEach(function(row) {
     var uc = row.unit_cost || 0;
@@ -708,7 +710,7 @@ function ab_buildNonProgSectionTotal(rows, quarters, secTitle) {
       totalCost += u * uc;
     });
   });
-  html += '<td class="ab-frozen ab-calc" style="left:432px;width:90px;min-width:90px;">' + ab_fc(totalCost) + '</td>';
+  html += '<td class="ab-calc" style="width:85px;min-width:85px;">' + ab_fc(totalCost) + '</td>';
 
   // Per-quarter totals
   quarters.forEach(function(q, qi) {
@@ -1365,7 +1367,7 @@ function ab_getStyles() {
 .ab-tab-content.ab-hidden { display: none; }
 .ab-footer { display: flex; gap: 16px; align-items: center; padding: 12px 0; margin-top: 16px; }
 .ab-legend { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
-.ab-scroll-wrapper { overflow: auto; max-height: 520px; border: 1px solid #ddd; margin: 12px 0; position: relative; }
+.ab-scroll-wrapper { overflow: auto; max-height: 70vh; border: 1px solid #ddd; margin: 12px 0; position: relative; -webkit-overflow-scrolling: touch; }
 .ab-table { width: max-content; border-collapse: separate; border-spacing: 0; background: white; }
 .ab-table td, .ab-table th { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: center; font-size: 12px; white-space: nowrap; }
 .ab-table thead th { position: sticky; z-index: 9; background: #f5f5f5; }
