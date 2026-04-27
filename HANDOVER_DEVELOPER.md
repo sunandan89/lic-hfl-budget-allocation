@@ -8,15 +8,20 @@
 
 > **Read this entire document before pushing anything from the GitHub repo to staging.** Several of the changes below live ONLY on staging (Custom Fields, Property Setters, Workflow vocabulary widening). If you sync the repo without recreating these on the target environment first, the application will break — the Project Proposal workflow will reject every transition, the budget grids will render with empty convergence columns, and the QUR submit will throw "Invalid workflow action".
 >
-> ### ⚠️ CRITICAL — repo is incomplete as of 27 April 2026
+> ### Repo sync status — 27 April 2026
 >
-> Verified by reading `https://github.com/sunandan89/lic-hfl-budget-allocation` on `main` directly:
+> All actively-deployed code is now on branch `chore/sync-staging-2026-04-27` of the repo, awaiting merge to `main`. Open PR at:
+> `https://github.com/sunandan89/lic-hfl-budget-allocation/pull/new/chore/sync-staging-2026-04-27`
 >
-> - `budget_allocation_client_script.js` in the repo is **101 KB** — the v8c / early-v9 cut. The current shipped script on staging is **184 KB** (`budget_allocation_v9_final.js` locally). All convergence custom-field handling, NP single-table merge, Excel xlsx-js-style + JSZip rewrite, Geography Details extraction, Budget Summary field fixes, Activity Master rewiring, and the PBP custom-field plumbing post-26-April are **NOT in the repo yet.**
-> - `lic_hfl_qur_v2.js` (~52 KB, ~1,200 lines, v2.3) — **never pushed.** This is the entire Budget Utilisation / Quarterly Utilisation Reporting page on the Grant doctype. The repo has no Grant-doctype client script at all.
-> - `budget_utilisation_v3.js` — also never pushed (legacy, but if you want it as a fallback, it has to be committed).
+> Verified by reading the branch contents via the GitHub API:
 >
-> **The developer cannot reproduce staging from the repo today.** See the companion file `GIT_PUSH_PLAN.md` for the exact commit list to close this gap before sharing the repo.
+> - `budget_allocation_client_script.js` is now **184,149 B** (was 101 KB / v8c cut on `main`) — current v9 final.
+> - `lic_hfl_qur_v2.js` is now in the repo at top level (51,677 B, v2.3).
+> - `legacy/budget_utilisation_v3.js` archived for fallback.
+> - `HANDOVER_DEVELOPER.md`, `QUR_user_guide.md`, `GIT_PUSH_PLAN.md` added.
+> - `README.md` rewritten as a real entry-point.
+>
+> **Once this branch is merged, a developer can `git clone` and reproduce the deployed JS.** Fixtures (Custom Fields + Property Setters) are still a separate workstream — see Section D.
 >
 > The document is written in **two layers**:
 > 1. *Things that MUST be carried over* (Section A → Section E).
@@ -122,26 +127,48 @@ Final Approve also has a **server-side check** (in `frappe_theme/overrides/workf
 
 ## C. What is in the GitHub repo vs what is NOT
 
-### C.1 In the repo (`lic-hfl-budget-allocation`) — verified by reading the repo directly on 27 Apr 2026
+### C.1 On branch `chore/sync-staging-2026-04-27` (after the 27 Apr sync push)
 
-Only **5 files** are on `main`:
+Verified via GitHub API on the branch:
 
-| File on GitHub | Size | Status |
+| File on GitHub | Size | What it is |
 |---|---|---|
-| `README.md` | 1,899 B | Stub |
-| `HANDOVER_v9.md` | 8,065 B | Snapshot from 25 Apr |
-| `LIC_HFL_Budget_Allocation_Handover.md` | 13,481 B | v8c-era handover |
-| `activity_kpi_ngo_filter_client_script.js` | 690 B | Current |
-| `budget_allocation_client_script.js` | **101,515 B** | ⚠️ **STALE** — v9 final on staging is **184,149 B** |
+| `README.md` | 1,880 B | Repo entry-point — points to `HANDOVER_DEVELOPER.md` |
+| `HANDOVER_DEVELOPER.md` | this doc | **Primary developer handover** |
+| `HANDOVER_v9.md` | 8,065 B | Earlier (25 Apr) snapshot — kept for context |
+| `LIC_HFL_Budget_Allocation_Handover.md` | 13,481 B | v8c-era handover — DocType setup notes still relevant |
+| `QUR_user_guide.md` | 9,643 B | Partner-facing user guide |
+| `GIT_PUSH_PLAN.md` | 8,313 B | Audit trail of the 27 Apr sync push |
+| `activity_kpi_ngo_filter_client_script.js` | 690 B | Deploy as Client Script "Activity KPI NGO Filter" |
+| `budget_allocation_client_script.js` | **184,149 B** | Deploy as Client Script "LIC Budget Allocation v4" |
+| `lic_hfl_qur_v2.js` | 51,677 B | Deploy as Client Script "LIC HFL QUR v2" |
+| `legacy/budget_utilisation_v3.js` | 31,448 B | Archived — superseded by QUR v2 |
 
-### C.1b NOT yet in the repo (must commit before handing over)
+### C.1b Things deliberately NOT in the repo
 
-- `lic_hfl_qur_v2.js` (~52 KB) — **the entire QUR / Budget Utilisation Reporting page**. Never pushed.
-- `budget_utilisation_v3.js` (~31 KB) — superseded but still nice to commit for archival.
-- `QUR_user_guide.md` — partner-facing user guide.
-- `HANDOVER_DEVELOPER.md` (this document).
-- `GIT_PUSH_PLAN.md` (companion).
-- The replacement of `budget_allocation_client_script.js` with the contents of `budget_allocation_v9_final.js`.
+- **Custom Field definitions** — kept as schema, must be exported as fixtures (see Section D).
+- **Property Setter definitions** — same, fixtures only.
+- **`patch_gaf_0545_budget` Server Script** — DELIBERATELY excluded. It is a one-shot bypass (see Section F.1) and replicating it to prod is exactly what we want to prevent.
+- **Diagnostic / iteration drafts** that never reached production. Listed in Section C.1c so the developer knows they're local-only and not load-bearing.
+
+### C.1c Local-only artefacts in `~/Documents/Claude/Projects/LIC HFL Changes/`
+
+These are **not** in the repo and should not be deployed. Listed for completeness so the developer / future you doesn't try to use them:
+
+| Local file | Why it's not pushed |
+|---|---|
+| `budget_allocation_v7c..v9_activity_fix.js` (9 files) | Earlier iterations of the budget allocation script. Replaced by `v9_final`. Museum only. |
+| `budget_utilisation_v1.js`, `v2.js` | Diagnostic drafts (Apr 25–26) used to discover schema. Replaced by `v3` then by `lic_hfl_qur_v2.js`. |
+| `lic-budget-wireframe*.html` (3 files) | Static design wireframes. Reference only. |
+| `pattern-visuals/` | PNGs documenting Frappe patterns — already published on the patterns repo. |
+| `test_export_preview.xlsx`, `qurv2_*.txt`, `.qurv2_chunk*.js`, `.deploy/` | Deployment intermediates / test artefacts. |
+
+### C.1d On staging but no local copy + not in repo
+
+| Item | Status | Why it's not in the repo |
+|---|---|---|
+| `LIC Activity Utilisation` Client Script (Grant, v1, disabled) | Original Apr-14 activity-based QUR, kept disabled in DB on staging as a rollback safety net | We have no local copy of the script body (predates the local-file workflow). If you want it preserved, fetch the script body from staging via `frappe.client.get` on `Client Script` and commit it. Otherwise leave it on staging only — it's already disabled. |
+| `patch_gaf_0545_budget` Server Script | Disabled in staging DB | DELIBERATELY excluded — see Section F.1. |
 
 ### C.2 NOT in the repo, lives only on staging — recreate via fixtures or manual setup
 
@@ -340,11 +367,11 @@ If the developer is doing the prod cutover (or even setting up a UAT clone), do 
 2. **Apply Custom Field fixtures** (Section B.3 / Section D). Verify on the desk: `Project Budget Planning` form should now show the four `custom_*` fields; `Budget Planning Child` should show `unit` + `unit_cost`; `Quarterly Utilisation Report Child` should show the three `custom_*` fields.
 3. **Apply Property Setter fixtures** (Section B.4). Verify the Project proposal `stage` dropdown contains BOTH old and new label sets.
 4. **Verify the workflow override.** Trigger a dummy GAF transition Pending at RPL → Pending at PL with the popup. If you get `Stage cannot be "GAF Submitted"…`, the Property Setter import didn't widen the stage options — fix before continuing.
-5. **First push the missing files to GitHub** per `GIT_PUSH_PLAN.md` so the repo reflects what's on staging. Until that's done, the steps below assume files come from the local workspace folder, not from `git pull`.
-6. **Deploy Client Scripts** in this order:
-   1. `Activity KPI NGO Filter` ← from repo (already current)
-   2. `LIC Budget Allocation v4` ← paste contents of **`budget_allocation_v9_final.js`** (NOT `budget_allocation_client_script.js` from the repo until that file is replaced)
-   3. `LIC HFL QUR v2` ← paste contents of **`lic_hfl_qur_v2.js`** (currently only available locally — must commit first)
+5. **Merge branch `chore/sync-staging-2026-04-27` to `main`** if not already done, so `git clone` gives you the current code. (As of 27 Apr 2026 the branch is pushed but not yet merged.)
+6. **Deploy Client Scripts** in this order, pasting contents from the merged `main`:
+   1. `Activity KPI NGO Filter` ← `activity_kpi_ngo_filter_client_script.js`
+   2. `LIC Budget Allocation v4` ← `budget_allocation_client_script.js` (now 184 KB v9 final)
+   3. `LIC HFL QUR v2` ← `lic_hfl_qur_v2.js`
 7. **Smoke test on a fresh GAF:**
    - Create a GAF, select an NGO, ensure Activity KPIs auto-populate.
    - Open Budget Allocation tab → Programmatic + Non-Programmatic should render.
@@ -369,21 +396,22 @@ These are decisions I made on staging that the developer should validate against
 
 ---
 
-## I. Files in this folder you care about
+## I. Files in the repo (post-sync)
+
+After branch `chore/sync-staging-2026-04-27` merges to `main`, the developer pulls these:
 
 | File | Purpose |
 |---|---|
-| `budget_allocation_v9_final.js` | **Deploy as `LIC Budget Allocation v4` Client Script** |
-| `activity_kpi_ngo_filter_client_script.js` | **Deploy as `Activity KPI NGO Filter` Client Script** |
-| `lic_hfl_qur_v2.js` | **Deploy as `LIC HFL QUR v2` Client Script** |
+| `budget_allocation_client_script.js` | **Deploy as `LIC Budget Allocation v4` Client Script** (Project proposal) |
+| `activity_kpi_ngo_filter_client_script.js` | **Deploy as `Activity KPI NGO Filter` Client Script** (Project proposal) |
+| `lic_hfl_qur_v2.js` | **Deploy as `LIC HFL QUR v2` Client Script** (Grant) |
+| `legacy/budget_utilisation_v3.js` | Archived fallback — do not deploy |
 | `HANDOVER_DEVELOPER.md` | This document |
 | `HANDOVER_v9.md` | Earlier handover focused on v9 budget allocation only |
 | `LIC_HFL_Budget_Allocation_Handover.md` | Earlier (v8c-era) handover, retained for DocType setup notes |
 | `QUR_user_guide.md` | Partner-facing user guide for QUR — share with ops/PM team, not the developer |
-| `budget_utilisation_v1.js` / `v2.js` / `v3.js` | Earlier iterations of the Budget Utilisation widget — superseded by `lic_hfl_qur_v2.js`. Archive. |
-| `budget_allocation_v7c.js` … `v9_activity_fix.js` | Historical drafts. Archive. |
-| `lic-budget-wireframe*.html` | Static wireframes used during design. Reference only. |
-| `pattern-visuals/` | Pattern library notes. Internal. |
+| `GIT_PUSH_PLAN.md` | Audit trail of the 27 Apr sync push |
+| `README.md` | Repo entry-point |
 
 ---
 
